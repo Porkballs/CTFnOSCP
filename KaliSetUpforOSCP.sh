@@ -293,11 +293,13 @@ fetch "https://raw.githubusercontent.com/ropnop/windapsearch/master/windapsearch
 chmod +x "$WIN_AD/windapsearch.py" 2>/dev/null
 
 # ---- ldapsearch-ad (yaap7) --------------------------------------------------
-# Similar to windapsearch but supports NTLM hash auth (-hashes :NTLM) which is
+# Similar to windapsearch but supports NTLM hash auth (-H :NTLM) which is
 # very handy in OSCP-style workflows when you have a hash but no cleartext pw.
+# Installed via pipx — exposes 'ldapsearch-ad.py' globally on PATH.
 echo "  ldapsearch-ad..."
-fetch "https://raw.githubusercontent.com/yaap7/ldapsearch-ad/master/ldapsearch-ad.py" "$WIN_AD/ldapsearch-ad.py"
-chmod +x "$WIN_AD/ldapsearch-ad.py" 2>/dev/null
+if ! command -v ldapsearch-ad.py >/dev/null 2>&1; then
+    pipx install ldapsearchad || warn "pipx install ldapsearchad failed"
+fi
 
 # ---- SharpHound (BloodHound collector) --------------------------------------
 echo "  SharpHound..."
