@@ -48,6 +48,7 @@ $SUDO apt-get install -y \
     gobuster \
     feroxbuster \
     netexec \
+    chisel-common-binaries \
     golang-go \
     pipx \
     unzip \
@@ -246,8 +247,10 @@ echo "  PowerShell scripts..."
 PS_BASE="https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master"
 fetch "$PS_BASE/Recon/PowerView.ps1"             "$WIN_AD/PowerView.ps1"
 fetch "$PS_BASE/Privesc/PowerUp.ps1"             "$WIN_AD/PowerUp.ps1"
-fetch "$PS_BASE/Recon/Get-SPN.ps1"               "$WIN_AD/Get-SPN.ps1"
-fetch "$PS_BASE/Recon/Invoke-Kerberoast.ps1"     "$WIN_AD/Invoke-Kerberoast.ps1"
+# Get-SPN.ps1 and Invoke-Kerberoast aren't standalone files in PowerSploit —
+# they're functions inside PowerView.ps1. Empire still ships the standalone
+# Invoke-Kerberoast.ps1, which is what most write-ups link to.
+fetch "https://raw.githubusercontent.com/EmpireProject/Empire/master/data/module_source/credentials/Invoke-Kerberoast.ps1" "$WIN_AD/Invoke-Kerberoast.ps1"
 fetch "https://raw.githubusercontent.com/61106960/adPEAS/main/adPEAS.ps1"                              "$WIN_AD/adPEAS.ps1"
 fetch "https://raw.githubusercontent.com/dafthack/DomainPasswordSpray/master/DomainPasswordSpray.ps1"  "$WIN_AD/DomainPasswordSpray.ps1"
 fetch "https://raw.githubusercontent.com/Kevin-Robertson/Powermad/master/Powermad.ps1"                 "$WIN_AD/Powermad.ps1"
@@ -256,16 +259,39 @@ fetch "https://raw.githubusercontent.com/NetSPI/PowerUpSQL/master/PowerUpSQL.ps1
 # ---- Pre-compiled .NET tools (Flangvik's SharpCollection) -------------------
 echo "  SharpCollection (pre-compiled .NET)..."
 SC="https://raw.githubusercontent.com/Flangvik/SharpCollection/master/NetFramework_4.7_x64"
+# Ghostpack-CompiledBinaries is a defensive fallback for GhostPack-family tools
+# (Rubeus, Certify, SharpUp, ...) in case Flangvik ever drops the build.
+# Note: SeManageVolumeExploit.exe and SpoolSample.exe are NOT in either — they
+# come from dedicated sources below.
+GP="https://raw.githubusercontent.com/r3motecontrol/Ghostpack-CompiledBinaries/master"
 for tool in Rubeus.exe Certify.exe SharpUp.exe SharpGPOAbuse.exe \
-            SharpSCCM.exe SharpShares.exe SeManageVolumeExploit.exe \
-            KrbRelayUp.exe GMSAPasswordReader.exe SpoolSample.exe; do
+            SharpSCCM.exe SharpShares.exe \
+            KrbRelayUp.exe GMSAPasswordReader.exe; do
     fetch "$SC/$tool" "$WIN_AD/$tool"
+    # If SharpCollection didn't deliver a usable file, try Ghostpack as backup
+    # (only for the GhostPack-family tools it actually carries).
+    if [ ! -s "$WIN_AD/$tool" ]; then
+        case "$tool" in
+            Rubeus.exe|Certify.exe|SharpUp.exe|SharpDPAPI.exe|SharpDump.exe|SafetyKatz.exe|Seatbelt.exe)
+                echo "    [fallback] trying Ghostpack-CompiledBinaries for $tool"
+                fetch "$GP/$tool" "$WIN_AD/$tool"
+                ;;
+        esac
+    fi
 done
 
+# ---- SpoolSample (not in SharpCollection — use jakobfriedl's prebuilds) -----
+echo "  SpoolSample..."
+fetch "https://github.com/jakobfriedl/precompiled-binaries/raw/main/LateralMovement/SpoolSample.exe" "$WIN_AD/SpoolSample.exe"
+
+# ---- SeManageVolumeExploit (CsEnox's own release, tag 'public') -------------
+echo "  SeManageVolumeExploit..."
+fetch "https://github.com/CsEnox/SeManageVolumeExploit/releases/download/public/SeManageVolumeExploit.exe" "$WIN_AD/SeManageVolumeExploit.exe"
+
 # ---- RunasCs ----------------------------------------------------------------
+# Invoke-RunasCs.ps1 lives in the master branch, not in release assets.
 echo "  RunasCs..."
-TAG=$(gh_latest_tag "antonioCoco/RunasCs")
-[ -n "$TAG" ] && fetch "https://github.com/antonioCoco/RunasCs/releases/download/${TAG}/Invoke-RunasCs.ps1" "$WIN_AD/Invoke-RunasCs.ps1"
+fetch "https://raw.githubusercontent.com/antonioCoco/RunasCs/master/Invoke-RunasCs.ps1" "$WIN_AD/Invoke-RunasCs.ps1"
 
 # ---- kerbrute (multi-platform) ----------------------------------------------
 echo "  kerbrute..."
@@ -303,10 +329,11 @@ if ! command -v ldapsearch-ad.py >/dev/null 2>&1; then
 fi
 
 # ---- SharpHound (BloodHound collector) --------------------------------------
+# Repo moved BloodHoundAD -> SpecterOps; asset name is LOWERCASE sharphound-*
 echo "  SharpHound..."
-TAG=$(gh_latest_tag "BloodHoundAD/SharpHound")
+TAG=$(gh_latest_tag "SpecterOps/SharpHound")
 if [ -n "$TAG" ]; then
-    fetch "https://github.com/BloodHoundAD/SharpHound/releases/download/${TAG}/SharpHound-${TAG}.zip" "$WIN_AD/SharpHound.zip"
+    fetch "https://github.com/SpecterOps/SharpHound/releases/download/${TAG}/sharphound-${TAG}.zip" "$WIN_AD/SharpHound.zip"
     if [ -f "$WIN_AD/SharpHound.zip" ] && [ ! -f "$WIN_AD/SharpHound.exe" ]; then
         unzip -o -j "$WIN_AD/SharpHound.zip" "SharpHound.exe" "SharpHound.ps1" -d "$WIN_AD/" >/dev/null 2>&1
     fi
@@ -367,7 +394,8 @@ fi
 echo "  azurehound..."
 TAG=$(gh_latest_tag "SpecterOps/AzureHound")
 if [ -n "$TAG" ]; then
-    fetch "https://github.com/SpecterOps/AzureHound/releases/download/${TAG}/azurehound-linux-amd64.zip" "$WIN_AD/azurehound.zip"
+    # Asset filename: AzureHound_vX.Y.Z_linux_amd64.zip (capital A, underscores)
+    fetch "https://github.com/SpecterOps/AzureHound/releases/download/${TAG}/AzureHound_${TAG}_linux_amd64.zip" "$WIN_AD/azurehound.zip"
     if [ -f "$WIN_AD/azurehound.zip" ] && [ ! -f "$WIN_AD/azurehound" ]; then
         unzip -o -j "$WIN_AD/azurehound.zip" "azurehound" -d "$WIN_AD/" >/dev/null 2>&1
         chmod +x "$WIN_AD/azurehound" 2>/dev/null
@@ -389,14 +417,19 @@ fi
 [ -f /opt/ligolo-ng/proxy ] && cp -n /opt/ligolo-ng/proxy "$WIN_AD/proxy"
 
 # ---- EXEs folder ------------------------------------------------------------
-echo "  chisel (linux + windows)..."
-TAG=$(gh_latest_tag "jpillora/chisel")
-if [ -n "$TAG" ]; then
-    CV="${TAG#v}"
-    fetch "https://github.com/jpillora/chisel/releases/download/${TAG}/chisel_${CV}_linux_amd64.gz"   "$WIN_EXES/chisel.gz"
-    fetch "https://github.com/jpillora/chisel/releases/download/${TAG}/chisel_${CV}_windows_amd64.gz" "$WIN_EXES/chiselx64.exe.gz"
-    [ -f "$WIN_EXES/chisel.gz" ]        && [ ! -f "$WIN_EXES/chisel" ]        && gunzip "$WIN_EXES/chisel.gz" && chmod +x "$WIN_EXES/chisel"
-    [ -f "$WIN_EXES/chiselx64.exe.gz" ] && [ ! -f "$WIN_EXES/chiselx64.exe" ] && gunzip "$WIN_EXES/chiselx64.exe.gz"
+echo "  chisel (linux + windows from chisel-common-binaries)..."
+# Kali's chisel-common-binaries package ships prebuilt linux+windows binaries
+# in /usr/share/chisel-common-binaries/. Cleaner than chasing GitHub assets.
+CHISEL_DIR="/usr/share/chisel-common-binaries"
+if [ -d "$CHISEL_DIR" ]; then
+    # Pick highest version present (handles multiple versions cleanly)
+    LIN_BIN=$(ls "$CHISEL_DIR"/chisel_*_linux_amd64 2>/dev/null | sort -V | tail -n1)
+    WIN_BIN=$(ls "$CHISEL_DIR"/chisel_*_windows_amd64.exe 2>/dev/null | sort -V | tail -n1)
+    [ -n "$LIN_BIN" ] && [ ! -f "$WIN_EXES/chisel" ]        && cp "$LIN_BIN" "$WIN_EXES/chisel"        && chmod +x "$WIN_EXES/chisel"
+    [ -n "$WIN_BIN" ] && [ ! -f "$WIN_EXES/chiselx64.exe" ] && cp "$WIN_BIN" "$WIN_EXES/chiselx64.exe"
+    echo "    [ok]   chisel from $(basename "${LIN_BIN:-?}")"
+else
+    warn "  $CHISEL_DIR not found — is chisel-common-binaries installed?"
 fi
 
 echo "  GodPotato..."
@@ -450,7 +483,7 @@ cp -n "$WIN_AD/kerbrute_windows_amd64.exe"  "$WIN_ROOT/kerbrute.exe"    2>/dev/n
 # ---- Linux tools ------------------------------------------------------------
 echo "  lse, unix-privesc-check, hashgrab..."
 fetch "https://raw.githubusercontent.com/diego-treitos/linux-smart-enumeration/master/lse.sh"          "$LIN_TOOLS/lse.sh"
-fetch "https://raw.githubusercontent.com/pentestmonkey/unix-privesc-check/master/unix-privesc-check"   "$LIN_TOOLS/unix-privesc-check"
+fetch "https://raw.githubusercontent.com/pentestmonkey/unix-privesc-check/1_x/unix-privesc-check"       "$LIN_TOOLS/unix-privesc-check"
 fetch "https://raw.githubusercontent.com/xct/hashgrab/main/hashgrab.py"                                "$LIN_TOOLS/hashgrab.py"
 chmod +x "$LIN_TOOLS/lse.sh" "$LIN_TOOLS/unix-privesc-check" "$LIN_TOOLS/hashgrab.py" 2>/dev/null
 
@@ -469,6 +502,9 @@ cat <<'TODO'
       Windows/AD:
         - ADenum.ps1                              (multiple forks; pick one)
         - chrome_online.paf.exe                   (PortableApps.com)
+        - Get-SPN.ps1                             (not a standalone file — functionality
+                                                   is inside PowerView.ps1's Get-DomainSPNTicket;
+                                                   alt: nidem/kerberoast/GetUserSPNs.ps1)
         - ldapdomaindump.exe                      (python: pipx install ldapdomaindump)
         - Microsoft.ActiveDirectory.Management.dll (from RSAT on a Windows host)
         - vncpwd.exe                              (legacy — keep your copy)
