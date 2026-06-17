@@ -51,6 +51,7 @@ $SUDO apt-get install -y \
     golang-go \
     pipx \
     unzip \
+    p7zip-full \
     wget \
     curl \
     git \
@@ -324,6 +325,19 @@ if [ -n "$TAG" ]; then
     if [ -f "$WIN_AD/mimikatz_trunk.zip" ] && [ ! -f "$WIN_AD/mimikatz.exe" ]; then
         unzip -o -j "$WIN_AD/mimikatz_trunk.zip" "x64/mimikatz.exe" -d "$WIN_AD/" >/dev/null 2>&1
     fi
+fi
+
+# ---- KvcForensic (modern lsass.dmp parser, replaces pypykatz on 24H2+) ------
+# Password-protected 7z archive (password: github.com). The KvcForensic.json
+# offset templates MUST live next to the binary, so we extract to a subdir.
+# Linux-only — parse dumps locally on Kali instead of spinning up Windows.
+echo "  KvcForensic (Linux)..."
+fetch "https://github.com/wesmar/KvcForensic/releases/download/latest/KvcForensic_Linux.7z" "$LIN_TOOLS/KvcForensic_Linux.7z"
+if [ -f "$LIN_TOOLS/KvcForensic_Linux.7z" ] && [ ! -f "$LIN_TOOLS/KvcForensic/KvcForensic_static" ]; then
+    mkdir -p "$LIN_TOOLS/KvcForensic"
+    7z x -y -p"github.com" "$LIN_TOOLS/KvcForensic_Linux.7z" -o"$LIN_TOOLS/KvcForensic" >/dev/null 2>&1 \
+        && chmod +x "$LIN_TOOLS/KvcForensic/KvcForensic" "$LIN_TOOLS/KvcForensic/KvcForensic_static" 2>/dev/null \
+        || warn "  7z extract of KvcForensic_Linux.7z failed"
 fi
 
 # ---- Sysinternals (PsExec, Procdump, ADExplorer, Procmon) -------------------
