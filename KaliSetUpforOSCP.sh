@@ -328,6 +328,14 @@ if ! command -v ldapsearch-ad.py >/dev/null 2>&1; then
     pipx install ldapsearchad || warn "pipx install ldapsearchad failed"
 fi
 
+# ---- wenum (WebFuzzForge fork of wfuzz) -------------------------------------
+# Actively-maintained wfuzz fork. No PyPI release — installed from git.
+# Exposes 'wenum' globally on PATH via pipx.
+echo "  wenum..."
+if ! command -v wenum >/dev/null 2>&1; then
+    pipx install git+https://github.com/WebFuzzForge/wenum || warn "pipx install wenum failed"
+fi
+
 # ---- SharpHound (BloodHound collector) --------------------------------------
 # Repo moved BloodHoundAD -> SpecterOps; asset name is LOWERCASE sharphound-*
 echo "  SharpHound..."
