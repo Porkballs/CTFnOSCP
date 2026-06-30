@@ -336,6 +336,24 @@ if ! command -v wenum >/dev/null 2>&1; then
     pipx install git+https://github.com/WebFuzzForge/wenum || warn "pipx install wenum failed"
 fi
 
+# ---- XSStrike (XSS scanner) -------------------------------------------------
+# Full repo (imports from core/, db/, plugins/ — not single-file). Not on PyPI,
+# so pipx is unsuitable. Cloned to /opt/XSStrike with a wrapper on PATH.
+echo "  XSStrike..."
+if [ ! -d /opt/XSStrike ]; then
+    $SUDO git clone --depth 1 https://github.com/s0md3v/XSStrike /opt/XSStrike \
+        && $SUDO pip install --break-system-packages -r /opt/XSStrike/requirements.txt >/dev/null \
+        || warn "  XSStrike clone/install failed"
+else
+    $SUDO git -C /opt/XSStrike pull --ff-only >/dev/null 2>&1 || true
+fi
+# /usr/local/bin/xsstrike wrapper — invokes python on the repo's entry point
+if [ ! -f /usr/local/bin/xsstrike ]; then
+    printf '#!/bin/bash\nexec python3 /opt/XSStrike/xsstrike.py "$@"\n' \
+        | $SUDO tee /usr/local/bin/xsstrike >/dev/null
+    $SUDO chmod +x /usr/local/bin/xsstrike
+fi
+
 # ---- SharpHound (BloodHound collector) --------------------------------------
 # Repo moved BloodHoundAD -> SpecterOps; asset name is LOWERCASE sharphound-*
 echo "  SharpHound..."
