@@ -336,6 +336,15 @@ if ! command -v wenum >/dev/null 2>&1; then
     pipx install git+https://github.com/WebFuzzForge/wenum || warn "pipx install wenum failed"
 fi
 
+# ---- Gopherus (Esonhugh/Gopherus3 — Python 3 fork of tarunkant/Gopherus) ----
+# The original tarunkant/Gopherus is unmaintained (Python 2, PR#18 open since
+# 2022). Esonhugh/Gopherus3 is the active Python 3 refactor with argparse CLI
+# and adds SMTP/expanded memcache modules. Exposes 'gopherus' on PATH.
+echo "  gopherus (Gopherus3)..."
+if ! command -v gopherus >/dev/null 2>&1; then
+    pipx install git+https://github.com/Esonhugh/Gopherus3.git || warn "pipx install Gopherus3 failed"
+fi
+
 # ---- XSStrike (XSS scanner) -------------------------------------------------
 # Full repo (imports from core/, db/, plugins/ — not single-file). Not on PyPI,
 # so pipx is unsuitable. Cloned to /opt/XSStrike with a wrapper on PATH.
