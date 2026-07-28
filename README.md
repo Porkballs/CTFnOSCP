@@ -244,3 +244,10 @@ chmod +x fixZSHHistory.sh
 
 
 ./fixZSHHistory.sh
+
+
+# Bloodhound_Cyphers.md
+A list of commonly used cyphers to run for Bloodhound
+
+# NetExec (NXC) Cheatsheet.md
+Quick reference cheatsheet for using NXC
