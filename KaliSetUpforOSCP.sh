@@ -48,6 +48,7 @@ $SUDO apt-get install -y \
     gobuster \
     feroxbuster \
     netexec \
+    sstimap \
     chisel-common-binaries \
     golang-go \
     pipx \
