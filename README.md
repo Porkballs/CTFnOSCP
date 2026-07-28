@@ -28,6 +28,7 @@ Everything the `setup.sh` script installs, staged, or configures on a fresh Kali
 | `gobuster` | Directory / DNS / vhost fuzzer |
 | `feroxbuster` | Recursive content discovery (Rust) |
 | `netexec` | Modern replacement for CrackMapExec |
+| 'sstimap` | Automatic SSTI (Server-Side Template Injection) detection & exploitation |
 | `chisel-common-binaries` | Prebuilt chisel binaries (linux + windows) |
 | `golang-go` | Go toolchain |
 | `pipx` | Isolated Python app installer |
