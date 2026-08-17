@@ -59,6 +59,7 @@ $SUDO apt-get install -y \
     git \
     build-essential \
     python3-dev \
+    ruby \
     libsasl2-dev \
     libldap2-dev \
     libssl-dev
@@ -362,6 +363,25 @@ if [ ! -f /usr/local/bin/xsstrike ]; then
     printf '#!/bin/bash\nexec python3 /opt/XSStrike/xsstrike.py "$@"\n' \
         | $SUDO tee /usr/local/bin/xsstrike >/dev/null
     $SUDO chmod +x /usr/local/bin/xsstrike
+fi
+
+# ---- XXEinjector (Ruby, XXE exploitation) -----------------------------------
+# No maintained fork exists — every "fork" is a verbatim mirror of enjoiz's
+# original (checked: micxu, MichaelWayneLIU, pekita1, CyberScions,
+# The-Cracker-Technology). Kali doesn't package it. Single .rb file, needs
+# only Ruby (installed above via apt).
+echo "  XXEinjector..."
+if [ ! -d /opt/XXEinjector ]; then
+    $SUDO git clone --depth 1 https://github.com/enjoiz/XXEinjector /opt/XXEinjector \
+        || warn "  XXEinjector clone failed"
+else
+    $SUDO git -C /opt/XXEinjector pull --ff-only >/dev/null 2>&1 || true
+fi
+# /usr/local/bin/xxeinjector wrapper
+if [ ! -f /usr/local/bin/xxeinjector ]; then
+    printf '#!/bin/bash\nexec ruby /opt/XXEinjector/XXEinjector.rb "$@"\n' \
+        | $SUDO tee /usr/local/bin/xxeinjector >/dev/null
+    $SUDO chmod +x /usr/local/bin/xxeinjector
 fi
 
 # ---- SharpHound (BloodHound collector) --------------------------------------
