@@ -1,3 +1,7 @@
+# A Collection of tools for OSCP/CTF/Bug-Bounty 
+
+#### WARNING - There are auto-exploit tools. Check before using!
+
 # Kali Setup — Apps & Programs Inventory
 
 Everything the `setup.sh` script installs, stages, or configures on a fresh Kali VM.
@@ -220,30 +224,7 @@ All ✅ for OSCP+ (utility scripts, editors, legacy tools).
 
 ---
 
-## 8. OSCP+ Exam Checklist
-
-**Before the exam, remember these are 🚫 PROHIBITED — do NOT run them:**
-
-- `sstimap` — even if you find SSTI, do it manually with Tplmap-style payload testing or by hand
-- `xsstrike` — XSS must be exploited manually (Burp Repeater + custom payloads)
-- `xxeinjector` — XXE payloads must be constructed manually
-- **`sqlmap`** *(Kali default)* — SQLi must be exploited manually. Use manual UNION/blind/time-based techniques
-- `nessus`, `openvas`, `nexpose` — no mass vuln scanners
-
-**Also remember these OSCP+ RESTRICTIONS:**
-
-- ⚠️ **Metasploit** — allowed against ONE target only (Auxiliary, Exploit, Post modules or Meterpreter)
-- ⚠️ **Responder** — allowed in analyze-only mode (`-A`). **Poisoning/spoofing is prohibited**
-- ⚠️ **No spoofing** — IP, ARP, DNS, NBNS, etc.
-
-**All the ⚡ tools I originally flagged are actually ✅ ALLOWED on OSCP+:**
-mimikatz, Rubeus, kerbrute, netexec, all Sharp* tools, all Potato exploits, PrintSpoofer, SpoolSample, Snaffler, gopherus (payload gen only), hashgrab, KvcForensic, DomainPasswordSpray, Invoke-Kerberoast, etc.
-
-The OSCP+ line isn't "does it automate anything?" — it's "does it automate the vulnerability discovery → exploitation chain like SQLmap does?" Almost none of the AD/privesc tools do that. They're targeted single-purpose exploits or enumeration, both of which OffSec explicitly permits.
-
----
-
-## 9. Quick-Reference Command Map
+## 8. Quick-Reference Command Map
 
 | Command | OSCP+ | Attack surface | Provided by |
 |---|---|---|---|
