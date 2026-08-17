@@ -1,5 +1,4 @@
-List of tools for OSCP.
-# No Auto EXPLOITS
+List of tools for OSCP/CTF/Bugbounty.
 ### Script will update and download repos/tools that is useful for OSCP 
 ### Files will be downloaded and sorted onto /home/kali/Toolkit/
 # Create snapshot on VM incase system updates break KALI
@@ -7,235 +6,210 @@ List of tools for OSCP.
 chmod +x KaliSetUpforOSCP.sh
 
 ./KaliSetUpforOSCP.sh
+Legend: ⚡ = auto-exploit tool (actively exploits a vulnerability to achieve impact: RCE, credential dump, privesc, file read, etc.). Unmarked tools are for enumeration, recon, tunneling, editing, or general support.
 # Kali Setup — Apps & Programs Inventory
 
 Everything the `setup.sh` script installs, staged, or configures on a fresh Kali VM.
 
 ---
 
-## 1. System Repositories & apt Packages
+⚠️ OSCP+ Compliance Legend
 
-### Repositories added
-- **Sublime Text** — `download.sublimetext.com/apt/stable` (signed-by keyring at `/etc/apt/keyrings/sublimehq-archive.gpg`)
+Tools are marked per OffSec's OSCP+ Exam Guide (not my own judgement). OffSec's own official allowed list is included at the bottom of this section; anything not on that list is judged against their stated rule: "no automatic exploitation tools like SQLmap, SQLninja, db_autopwn, browser_autopwn — or any tool that performs a similar function".
 
-### Packages installed via `apt-get`
+Marker	Meaning
+✅	OSCP+ ALLOWED — either on OffSec's explicit allowed list, or functionally equivalent to allowed tools (enumeration, single-purpose exploits, payload generators, tunneling, etc.)
+⚠️	OSCP+ RESTRICTED — allowed only with conditions (e.g. Responder analyze-only, Metasploit one-target-only)
+🚫	OSCP+ PROHIBITED — SQLmap-class auto-exploit tool. Using this in the exam is a violation
 
-| Package | Purpose |
-|---|---|
-| `gedit` | GUI text editor |
-| `sublime-text` | Primary code / notes editor |
-| `seclists` | Wordlist collection |
-| `gobuster` | Directory / DNS / vhost fuzzer |
-| `feroxbuster` | Recursive content discovery (Rust) |
-| `netexec` | Modern replacement for CrackMapExec |
-| 'sstimap` | Automatic SSTI (Server-Side Template Injection) detection & exploitation |
-| `chisel-common-binaries` | Prebuilt chisel binaries (linux + windows) |
-| `golang-go` | Go toolchain |
-| `pipx` | Isolated Python app installer |
-| `unzip`, `p7zip-full` | Archive extraction (zip + password-protected 7z) |
-| `wget`, `curl` | HTTP downloaders |
-| `git` | Version control (used for cloning tools) |
-| `build-essential`, `python3-dev` | Compilation deps for `python-ldap` |
-| `libsasl2-dev`, `libldap2-dev`, `libssl-dev` | LDAP / SASL / TLS libs for `python-ldap` |
+OffSec's official OSCP+ allowed tools list (from the OSCP+ Exam FAQ): BloodHound (Legacy & CE), SharpHound, PowerShell Empire, Covenant, PowerView, Rubeus, evil-winrm, Responder (poisoning/spoofing not allowed), CrackMapExec/NetExec, Mimikatz, Impacket, PrintSpoofer.
 
----
+⚠️ SQLmap is Kali default but is PROHIBITED on OSCP+. Same for the three prohibited tools this script installs — they are intentionally included because this toolkit isn't OSCP-exam-only; it's your working red-team box. Just don't run them during the exam.
 
-## 2. Python Libraries (system pip, `--break-system-packages`)
+1. System Repositories & apt Packages
+Repositories added
+Sublime Text — download.sublimetext.com/apt/stable (signed-by keyring)
+Packages installed via apt-get
+Package	OSCP+	Purpose
+gedit	✅	GUI text editor
+sublime-text	✅	Code / notes editor
+seclists	✅	Wordlists
+gobuster	✅	Directory / DNS / vhost fuzzer
+feroxbuster	✅	Recursive content discovery (Rust)
+netexec	✅	On OffSec allowed list (as CrackMapExec/NetExec)
+sstimap	🚫	PROHIBITED — SQLmap-class auto-exploit for SSTI
+chisel-common-binaries	✅	Prebuilt chisel binaries
+golang-go	✅	Go toolchain
+pipx	✅	Isolated Python app installer
+unzip, p7zip-full	✅	Archive extraction
+wget, curl	✅	HTTP downloaders
+git	✅	Version control
+ruby	✅	Ruby interpreter (for XXEinjector)
+build-essential, python3-dev	✅	Build deps
+libsasl2-dev, libldap2-dev, libssl-dev	✅	Build deps for python-ldap
+2. Python Libraries (system pip, --break-system-packages)
 
-| Library | Used by |
-|---|---|
-| `python-ldap` | PowerView-py, general AD LDAP tooling |
-| `pyasn1`, `pyasn1-modules` | `windapsearch.py` |
-| `pylnk3` | `hashgrab.py` |
-| `ldap3`, `pycryptodome` | (kept for other ad-hoc LDAP scripting) |
+All libraries — utility only, no OSCP+ classification needed.
 
-Also installed to system Python via `pip -r requirements.txt`:
+Library	Used by
+python-ldap	PowerView-py, general AD tooling
+pyasn1, pyasn1-modules	windapsearch.py
+pylnk3	hashgrab.py
+ldap3, pycryptodome	Ad-hoc LDAP scripting
 
-| From | Libraries |
-|---|---|
-| `XSStrike` | `python-Levenshtein`, `prettytable`, `requests`, `tld`, `fuzzywuzzy` |
+Also from XSStrike/requirements.txt: python-Levenshtein, prettytable, requests, tld, fuzzywuzzy.
 
----
+3. Python Tools (pipx — global CLI commands)
+Command	OSCP+	Purpose
+ldapsearch-ad.py	✅	LDAP enum (equivalent to allowed PowerView/windapsearch)
+wenum	✅	Fuzzer (equivalent to allowed DirBuster/gobuster)
+gopherus	✅	Generates SSRF payloads — operator manually delivers them
 
-## 3. Python Tools (pipx — global CLI commands)
+Note on gopherus: it doesn't auto-exploit — it generates payload strings you paste into your own request. Analogous to using revshells.com to build a reverse shell. Not a SQLmap-class tool.
 
-| Command | Package / Source | Notes |
-|---|---|---|
-| `ldapsearch-ad.py` | `ldapsearchad` (PyPI) | AD LDAP enum with NTLM-hash auth support |
-| `wenum` | `git+WebFuzzForge/wenum` | Actively-maintained wfuzz fork |
-| `gopherus` | `git+Esonhugh/Gopherus3` | Python 3 SSRF payload generator |
+4. Standalone Applications
+Installed under /opt/
+Path	OSCP+	What
+/opt/ligolo-ng/proxy	✅	Tunneling proxy (symlinked to /usr/local/bin/ligolo-proxy)
+/opt/ligolo-ng/agents/linux/agent	✅	Ligolo Linux agent
+/opt/ligolo-ng/agents/windows/agent.exe	✅	Ligolo Windows agent
+/opt/XSStrike/	🚫	PROHIBITED — SQLmap-class auto-exploit for XSS
+/opt/XXEinjector/	🚫	PROHIBITED — SQLmap-class auto-exploit for XXE
+Wrappers on /usr/local/bin/
+Command	OSCP+	Wraps
+ligolo-proxy	✅	Symlink → /opt/ligolo-ng/proxy
+xsstrike	🚫	Shim → python3 /opt/XSStrike/xsstrike.py
+xxeinjector	🚫	Shim → ruby /opt/XXEinjector/XXEinjector.rb
+Other
+Item	OSCP+	Location
+RustScan	✅	apt (from GitHub .deb) — port scanner
+Powerline fonts	✅	User-level install
+rockyou.txt extracted	✅	/usr/share/wordlists/rockyou.txt
+5. Windows Toolkit — ~/Toolkit/Windows/
+Windows/AD/ — Active Directory tooling
 
----
+PowerShell scripts — all ✅ (single-purpose scripts, not auto-exploit frameworks)
 
-## 4. Standalone Applications
+File	OSCP+	Purpose
+PowerView.ps1	✅	On OffSec allowed list
+PowerUp.ps1	✅	Local privesc audit (PowerSploit)
+Invoke-Kerberoast.ps1	✅	Auto-request Kerberoast hashes (Kerberoasting is a manual technique)
+adPEAS.ps1	✅	AD enum aggregator
+DomainPasswordSpray.ps1	✅	Password spray
+Powermad.ps1	✅	ms-DS-MachineAccountQuota abuse
+PowerUpSQL.ps1	✅	SQL Server enum + specific attacks
+Invoke-RunasCs.ps1	✅	Execute-as-user helper
 
-### Installed under `/opt/`
+Pre-compiled .NET binaries (Flangvik/SharpCollection)
 
-| Path | What |
-|---|---|
-| `/opt/ligolo-ng/proxy` | Linux proxy binary (symlinked to `/usr/local/bin/ligolo-proxy`) |
-| `/opt/ligolo-ng/agents/linux/agent` | Ligolo Linux agent (for Linux targets) |
-| `/opt/ligolo-ng/agents/windows/agent.exe` | Ligolo Windows agent (for Windows targets) |
-| `/opt/XSStrike/` | Full XSStrike repo clone |
+Binary	OSCP+	Purpose
+Rubeus.exe	✅	On OffSec allowed list — Kerberos attacks
+Certify.exe	✅	AD CS template enumeration
+SharpUp.exe	✅	Local privesc audit
+SharpGPOAbuse.exe	✅	GPO abuse (specific single attack)
+SharpSCCM.exe	✅	SCCM attacks (specific tool)
+SharpShares.exe	✅	Share enumeration
+KrbRelayUp.exe	✅	Kerberos relay privesc (specific attack chain)
+GMSAPasswordReader.exe	✅	gMSA password reader (single-purpose)
 
-### Wrappers on `/usr/local/bin/`
+Additional binaries
 
-| Command | Wraps |
-|---|---|
-| `ligolo-proxy` | Symlink → `/opt/ligolo-ng/proxy` |
-| `xsstrike` | Shim → `python3 /opt/XSStrike/xsstrike.py` |
+Binary	OSCP+	Purpose
+SpoolSample.exe	✅	PrinterBug trigger (single-purpose)
+SeManageVolumeExploit.exe	✅	Specific privesc (analogous to PrintSpoofer)
+SharpHound.exe, SharpHound.ps1	✅	On OffSec allowed list — BloodHound collector
+Snaffler.exe	✅	Share credential loot (analogous to Impacket workflow)
+mimikatz.exe	✅	On OffSec allowed list
+kerbrute_{linux,darwin,windows}_amd64[.exe]	✅	User enum + password spray
+windapsearch-{linux,darwin,windows}-amd64[.exe]	✅	LDAP enum
+windapsearch.py	✅	LDAP enum (Python)
+PsExec64.exe	✅	Remote exec (Sysinternals)
+procdump64.exe	✅	Process dump (Sysinternals)
+ADExplorer64.exe	✅	AD inspection (Sysinternals)
+aquatone	✅	Visual recon
+azurehound	✅	Azure attack-path collector (analogous to BloodHound)
+nc64.exe	✅	Netcat
+agent.exe, proxy	✅	Ligolo binaries
+Windows/EXEs/ — General exploitation binaries
+Binary	OSCP+	Purpose
+chisel, chiselx64.exe	✅	Tunneling
+GodPotato/GodPotato-NET{2,35,4}.exe	✅	SeImpersonate → SYSTEM (single-purpose)
+JuicyPotato.exe	✅	Legacy SeImpersonate → SYSTEM
+PrintSpoofer{64,32}.exe	✅	On OffSec allowed list
+plink.exe	✅	SSH tunneling
+nc.exe, nc64.exe	✅	Netcat
+Procmon/...	✅	Process monitor (Sysinternals)
+PowerUp.ps1	✅	Copy of ../AD/PowerUp.ps1
+agent.exe	✅	Ligolo agent
+Windows/ (top-level)
+File	OSCP+	Purpose
+pspy64	✅	Linux process snooping (misplaced — actually a Linux tool)
+winPEASx64.exe	✅	Windows privesc enum
+SharpHound.exe, SharpHound.ps1	✅	Copy of AD/SharpHound.*
+kerbrute, kerbrute.exe	✅	Copies of AD/kerbrute_*
+6. Linux Toolkit — ~/Toolkit/LinuxTools/
+File	OSCP+	Purpose
+linpeas.sh	✅	Linux privesc enum
+lse.sh	✅	Linux Smart Enumeration
+unix-privesc-check	✅	Privesc audit
+hashgrab.py	✅	Payload generator (like revshells.com)
+chisel	✅	Tunneling
+nc	✅	Netcat
+KvcForensic/KvcForensic{,_static}	✅	Offline lsass.dmp parsing (analogous to mimikatz)
+KvcForensic/KvcForensic.json	✅	Offset templates
+7. Manual Follow-up (Not Auto-Fetched)
 
-### Other
+All ✅ for OSCP+ (utility scripts, editors, legacy tools).
 
-| Item | Location | Notes |
-|---|---|---|
-| RustScan | apt (from GitHub `.deb`) | Latest release, arch auto-detected |
-| Powerline fonts | User-level install | Via `~/Scripts/fonts/install.sh` |
-| `rockyou.txt` (extracted) | `/usr/share/wordlists/rockyou.txt` | Gunzipped from `.gz` if needed |
+Windows/AD/
+ADenum.ps1 — pick a fork
+chrome_online.paf.exe — PortableApps.com
+Get-SPN.ps1 — not standalone; use PowerView's Get-DomainSPNTicket
+ldapdomaindump.exe — pipx install ldapdomaindump
+Microsoft.ActiveDirectory.Management.dll — extract from RSAT
+vncpwd.exe — legacy
+watch_processes.ps1 — custom script
+Windows/EXEs/
+adduser.c / adduser.exe — custom code
+base64.ps1 — custom script
+dirty_pipe_*.c — CVE-2022-0847 POCs
+Juicy.Potato.x86.exe — older variant
+socat / socatx64.exe — try 3ndG4me/socat
+Windows/ (top-level)
+powershell_reverse_base64.ps1 — custom script
 
----
+8. OSCP+ Exam Checklist
 
-## 5. Windows Toolkit — `~/Toolkit/Windows/`
+Before the exam, remember these are 🚫 PROHIBITED — do NOT run them:
 
-### `Windows/AD/` — Active Directory tooling
+sstimap — even if you find SSTI, do it manually with Tplmap-style payload testing or by hand
+xsstrike — XSS must be exploited manually (Burp Repeater + custom payloads)
+xxeinjector — XXE payloads must be constructed manually
+sqlmap (Kali default) — SQLi must be exploited manually. Use manual UNION/blind/time-based techniques
+nessus, openvas, nexpose — no mass vuln scanners
 
-**PowerShell scripts**
+Also remember these OSCP+ RESTRICTIONS:
 
-| File | Source |
-|---|---|
-| `PowerView.ps1` | PowerSploit/Recon |
-| `PowerUp.ps1` | PowerSploit/Privesc |
-| `Invoke-Kerberoast.ps1` | EmpireProject (standalone) |
-| `adPEAS.ps1` | 61106960/adPEAS |
-| `DomainPasswordSpray.ps1` | dafthack |
-| `Powermad.ps1` | Kevin-Robertson |
-| `PowerUpSQL.ps1` | NetSPI |
-| `Invoke-RunasCs.ps1` | antonioCoco/RunasCs (master branch) |
+⚠️ Metasploit — allowed against ONE target only (Auxiliary, Exploit, Post modules or Meterpreter)
+⚠️ Responder — allowed in analyze-only mode (-A). Poisoning/spoofing is prohibited
+⚠️ No spoofing — IP, ARP, DNS, NBNS, etc.
 
-**Pre-compiled .NET binaries** (Flangvik/SharpCollection, with Ghostpack fallback)
 
-| Binary | Purpose |
-|---|---|
-| `Rubeus.exe` | Kerberos abuse (ASREPRoast, Kerberoast, S4U) |
-| `Certify.exe` | AD CS enumeration & abuse |
-| `SharpUp.exe` | Local privesc checks |
-| `SharpGPOAbuse.exe` | GPO abuse |
-| `SharpSCCM.exe` | SCCM attacks |
-| `SharpShares.exe` | Share enumeration |
-| `KrbRelayUp.exe` | Kerberos relay privesc |
-| `GMSAPasswordReader.exe` | Read gMSA passwords |
-
-**Additional binaries**
-
-| Binary | Source |
-|---|---|
-| `SpoolSample.exe` | jakobfriedl/precompiled-binaries |
-| `SeManageVolumeExploit.exe` | CsEnox releases |
-| `SharpHound.exe`, `SharpHound.ps1` | SpecterOps/SharpHound (extracted from zip) |
-| `Snaffler.exe` | SnaffCon/Snaffler |
-| `mimikatz.exe` | gentilkiwi (extracted from zip) |
-| `kerbrute_linux_amd64` | ropnop/kerbrute |
-| `kerbrute_darwin_amd64` | ropnop/kerbrute |
-| `kerbrute_windows_amd64.exe` | ropnop/kerbrute |
-| `windapsearch-linux-amd64` | ropnop/go-windapsearch |
-| `windapsearch-darwin-amd64` | ropnop/go-windapsearch |
-| `windapsearch-windows-amd64.exe` | ropnop/go-windapsearch |
-| `windapsearch.py` | ropnop/windapsearch (Python version) |
-| `PsExec64.exe` | Sysinternals |
-| `procdump64.exe` | Sysinternals |
-| `ADExplorer64.exe` | Sysinternals |
-| `aquatone` | michenriksen (Linux binary) |
-| `azurehound` | SpecterOps/AzureHound |
-| `nc64.exe` | int0x33/nc.exe |
-| `agent.exe`, `proxy` | copied from `/opt/ligolo-ng/` |
-
-### `Windows/EXEs/` — General exploitation binaries
-
-| Binary | Source |
-|---|---|
-| `chisel`, `chiselx64.exe` | apt `chisel-common-binaries` (copied from `/usr/share/`) |
-| `GodPotato/GodPotato-NET2.exe` | BeichenDream/GodPotato |
-| `GodPotato/GodPotato-NET35.exe` | BeichenDream/GodPotato |
-| `GodPotato/GodPotato-NET4.exe` | BeichenDream/GodPotato |
-| `JuicyPotato.exe` | ohpe/juicy-potato |
-| `PrintSpoofer64.exe` | itm4n/PrintSpoofer |
-| `printspoofer32.exe` | itm4n/PrintSpoofer |
-| `plink.exe` | PuTTY (the.earth.li) |
-| `nc.exe`, `nc64.exe` | int0x33/nc.exe |
-| `Procmon/ProcessMonitor.zip` (unzipped) | Sysinternals |
-| `PowerUp.ps1` | copy of `../AD/PowerUp.ps1` |
-| `agent.exe` | copy of `/opt/ligolo-ng/agents/windows/agent.exe` |
-
-### `Windows/` (top-level)
-
-| File | Source |
-|---|---|
-| `pspy64` | DominicBreuker/pspy |
-| `winPEASx64.exe` | peass-ng/PEASS-ng |
-| `SharpHound.exe`, `SharpHound.ps1` | copy of `AD/SharpHound.*` |
-| `kerbrute`, `kerbrute.exe` | copies of `AD/kerbrute_*` |
-
----
-
-## 6. Linux Toolkit — `~/Toolkit/LinuxTools/`
-
-| File | Source |
-|---|---|
-| `linpeas.sh` | peass-ng/PEASS-ng |
-| `lse.sh` | diego-treitos/linux-smart-enumeration |
-| `unix-privesc-check` | pentestmonkey (branch `1_x`) |
-| `hashgrab.py` | xct/hashgrab |
-| `chisel` | copy of `../Windows/EXEs/chisel` |
-| `nc` | copy of system `nc` binary |
-| `KvcForensic/KvcForensic` | wesmar/KvcForensic (dynamic build) |
-| `KvcForensic/KvcForensic_static` | wesmar/KvcForensic (static build) |
-| `KvcForensic/KvcForensic.json` | Required offset templates |
-
----
-
-## 7. Manual Follow-up (Not Auto-Fetched)
-
-Files with no canonical online source — copy from previous VM or backup.
-
-### `Windows/AD/`
-- `ADenum.ps1` — pick a fork
-- `chrome_online.paf.exe` — PortableApps.com
-- `Get-SPN.ps1` — not standalone; use `PowerView.ps1`'s `Get-DomainSPNTicket` or `nidem/kerberoast/GetUserSPNs.ps1`
-- `ldapdomaindump.exe` — install via `pipx install ldapdomaindump`
-- `Microsoft.ActiveDirectory.Management.dll` — extract from RSAT on a Windows host
-- `vncpwd.exe` — legacy, keep your copy
-- `watch_processes.ps1` — custom script
-
-### `Windows/EXEs/`
-- `adduser.c` / `adduser.exe` — custom code
-- `base64.ps1` — custom script
-- `dirty_pipe_*.c` — CVE-2022-0847 POCs
-- `Juicy.Potato.x86.exe` — older variant
-- `socat` / `socatx64.exe` — no official prebuilt; try `3ndG4me/socat`
-
-### `Windows/` (top-level)
-- `powershell_reverse_base64.ps1` — custom script
-
----
-
-## 8. Quick-Reference Command Map
-
-Commands available on PATH after setup completes:
-
-| Command | Provided by |
-|---|---|
-| `subl` | Sublime Text (apt) |
-| `feroxbuster`, `gobuster` | apt |
-| `netexec` (`nxc`) | apt |
-| `rustscan` | GitHub release (installed as .deb) |
-| `ligolo-proxy` | `/opt/ligolo-ng/proxy` (symlink) |
-| `ldapsearch-ad.py` | pipx |
-| `wenum` | pipx |
-| `gopherus` | pipx |
-| `xsstrike` | `/opt/XSStrike/xsstrike.py` (wrapper) |
-| `7z` | apt (`p7zip-full`) |
-
----
+9. Quick-Reference Command Map
+Command	OSCP+	Attack surface	Provided by
+subl	✅	(editor)	Sublime Text (apt)
+feroxbuster, gobuster	✅	Content discovery	apt
+wenum	✅	Parameter fuzzing	pipx
+netexec (nxc)	✅	SMB/WinRM/LDAP/MSSQL	apt
+sstimap	🚫	SSTI → RCE	apt
+xsstrike	🚫	XSS	wrapper
+xxeinjector	🚫	XXE	wrapper
+gopherus	✅	SSRF payloads	pipx
+ldapsearch-ad.py	✅	AD LDAP enum	pipx
+rustscan	✅	Fast port scanning	GitHub .deb
+ligolo-proxy	✅	Reverse tunneling	/opt/ligolo-ng/
+7z	✅	Archive extraction	apt
+--
 
 *Regenerate after modifying `setup.sh` — this file mirrors what the script installs.*
 
