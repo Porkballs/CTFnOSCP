@@ -49,6 +49,9 @@ Tools are marked per **OffSec's OSCP+ Exam Guide** (not my own judgement). OffSe
 | `ruby` | ✅ | Ruby interpreter (for XXEinjector) |
 | `build-essential`, `python3-dev` | ✅ | Build deps |
 | `libsasl2-dev`, `libldap2-dev`, `libssl-dev` | ✅ | Build deps for `python-ldap` |
+| `krb5-user` | ✅ | Kerberos client — provides `kinit`, `klist`, `kdestroy` |
+| `libkrb5-dev`, `krb5-config` | ✅ | Kerberos dev headers (for building `gssapi`, `ldeep`) |
+| `ntpdate` | ✅ | Time sync — required before Kerberos ops (KRB_AP_ERR_SKEW if drift >5 min) |
 
 ---
 
@@ -61,7 +64,8 @@ All libraries — utility only, no OSCP+ classification needed.
 | `python-ldap` | PowerView-py, general AD tooling |
 | `pyasn1`, `pyasn1-modules` | `windapsearch.py` |
 | `pylnk3` | `hashgrab.py` |
-| `ldap3`, `pycryptodome` | Ad-hoc LDAP scripting |
+| `ldap3`, `pycryptodome` | Ad-hoc LDAP scripting, `ldapsearch-ad`, `ldeep` |
+| `gssapi` | Python GSSAPI bindings — enables Kerberos auth for `ldap3` + Impacket |
 
 Also from `XSStrike/requirements.txt`: `python-Levenshtein`, `prettytable`, `requests`, `tld`, `fuzzywuzzy`.
 
@@ -72,6 +76,7 @@ Also from `XSStrike/requirements.txt`: `python-Levenshtein`, `prettytable`, `req
 | Command | OSCP+ | Purpose |
 |---|---|---|
 | `ldapsearch-ad.py` | ✅ | LDAP enum (equivalent to allowed PowerView/windapsearch) |
+| `ldeep` | ✅ | **In-depth** LDAP enum — bitlocker keys, silos, auth policies, SCCM, LAPS |
 | `wenum` | ✅ | Fuzzer (equivalent to allowed DirBuster/gobuster) |
 | `gopherus` | ✅ | Generates SSRF **payloads** — operator manually delivers them |
 
@@ -224,7 +229,30 @@ All ✅ for OSCP+ (utility scripts, editors, legacy tools).
 
 ---
 
-## 8. Quick-Reference Command Map
+## 8. OSCP+ Exam Checklist
+
+**Before the exam, remember these are 🚫 PROHIBITED — do NOT run them:**
+
+- `sstimap` — even if you find SSTI, do it manually with Tplmap-style payload testing or by hand
+- `xsstrike` — XSS must be exploited manually (Burp Repeater + custom payloads)
+- `xxeinjector` — XXE payloads must be constructed manually
+- **`sqlmap`** *(Kali default)* — SQLi must be exploited manually. Use manual UNION/blind/time-based techniques
+- `nessus`, `openvas`, `nexpose` — no mass vuln scanners
+
+**Also remember these OSCP+ RESTRICTIONS:**
+
+- ⚠️ **Metasploit** — allowed against ONE target only (Auxiliary, Exploit, Post modules or Meterpreter)
+- ⚠️ **Responder** — allowed in analyze-only mode (`-A`). **Poisoning/spoofing is prohibited**
+- ⚠️ **No spoofing** — IP, ARP, DNS, NBNS, etc.
+
+**All the ⚡ tools I originally flagged are actually ✅ ALLOWED on OSCP+:**
+mimikatz, Rubeus, kerbrute, netexec, all Sharp* tools, all Potato exploits, PrintSpoofer, SpoolSample, Snaffler, gopherus (payload gen only), hashgrab, KvcForensic, DomainPasswordSpray, Invoke-Kerberoast, etc.
+
+The OSCP+ line isn't "does it automate anything?" — it's "does it automate the vulnerability discovery → exploitation chain like SQLmap does?" Almost none of the AD/privesc tools do that. They're targeted single-purpose exploits or enumeration, both of which OffSec explicitly permits.
+
+---
+
+## 9. Quick-Reference Command Map
 
 | Command | OSCP+ | Attack surface | Provided by |
 |---|---|---|---|
@@ -237,6 +265,9 @@ All ✅ for OSCP+ (utility scripts, editors, legacy tools).
 | `xxeinjector` | 🚫 | XXE | wrapper |
 | `gopherus` | ✅ | SSRF payloads | pipx |
 | `ldapsearch-ad.py` | ✅ | AD LDAP enum | pipx |
+| `ldeep` | ✅ | In-depth AD LDAP enum (LAPS, silos, SCCM, etc.) | pipx |
+| `kinit`, `klist`, `kdestroy` | ✅ | Kerberos TGT request / manage | apt (`krb5-user`) |
+| `ntpdate` | ✅ | Sync clock before Kerberos ops | apt |
 | `rustscan` | ✅ | Fast port scanning | GitHub `.deb` |
 | `ligolo-proxy` | ✅ | Reverse tunneling | `/opt/ligolo-ng/` |
 | `7z` | ✅ | Archive extraction | apt |
