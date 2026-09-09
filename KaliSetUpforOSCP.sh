@@ -38,10 +38,12 @@ fi
 
 log "Updating package lists and upgrading..."
 $SUDO apt-get update -y
-$SUDO apt-get upgrade -y
+$SUDO DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
 
 log "Installing core tools..."
-$SUDO apt-get install -y \
+# DEBIAN_FRONTEND=noninteractive prevents krb5-user's default-realm prompt
+# (and any other package's debconf prompts) from stalling the script.
+$SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
     gedit \
     sublime-text \
     seclists \
@@ -60,6 +62,10 @@ $SUDO apt-get install -y \
     build-essential \
     python3-dev \
     ruby \
+    krb5-user \
+    libkrb5-dev \
+    krb5-config \
+    ntpdate \
     libsasl2-dev \
     libldap2-dev \
     libssl-dev
@@ -70,17 +76,20 @@ $SUDO apt-get install -y \
 #   - python-ldap         : LDAP bindings (PowerView-py, windapsearch, etc.)
 #   - pyasn1 / -modules   : ASN.1 support, required by windapsearch.py
 #   - pylnk3              : LNK file parsing, required by hashgrab.py
-#   - ldap3 / pycryptodome: required by ldapsearch-ad.py (pycryptodome enables
-#                           NTLM hash auth instead of cleartext password)
+#   - ldap3               : pure-Python LDAP (used by bloodyAD, ldeep, etc.)
+#   - pycryptodome        : crypto backend for ldapsearch-ad NTLM auth
+#   - gssapi              : Python GSSAPI bindings — enables Kerberos auth
+#                           via ldap3 and impacket (needs libkrb5-dev at build)
 
-log "Installing Python libraries (python-ldap, pyasn1*, pylnk3, ldap3, pycryptodome)..."
+log "Installing Python libraries (python-ldap, pyasn1*, pylnk3, ldap3, pycryptodome, gssapi)..."
 $SUDO pip install --break-system-packages \
     python-ldap \
     'pyasn1>=0.4.5' \
     'pyasn1-modules>=0.2.5' \
     pylnk3 \
     ldap3 \
-    pycryptodome
+    pycryptodome \
+    gssapi
 
 pipx ensurepath
 
@@ -328,6 +337,15 @@ chmod +x "$WIN_AD/windapsearch.py" 2>/dev/null
 echo "  ldapsearch-ad..."
 if ! command -v ldapsearch-ad.py >/dev/null 2>&1; then
     pipx install ldapsearchad || warn "pipx install ldapsearchad failed"
+fi
+
+# ---- ldeep (franc-pentest) --------------------------------------------------
+# In-depth LDAP enumeration — more thorough than windapsearch/ldapsearch-ad
+# (auth policies, bitlocker keys, silos, delegations, SCCM, LAPS, etc.).
+# Builds a native Kerberos extension (needs libkrb5-dev, installed above).
+echo "  ldeep..."
+if ! command -v ldeep >/dev/null 2>&1; then
+    pipx install ldeep || warn "pipx install ldeep failed"
 fi
 
 # ---- wenum (WebFuzzForge fork of wfuzz) -------------------------------------
