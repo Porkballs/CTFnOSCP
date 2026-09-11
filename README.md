@@ -77,6 +77,7 @@ Also from `XSStrike/requirements.txt`: `python-Levenshtein`, `prettytable`, `req
 |---|---|---|
 | `ldapsearch-ad.py` | ✅ | LDAP enum (equivalent to allowed PowerView/windapsearch) |
 | `ldeep` | ✅ | **In-depth** LDAP enum — bitlocker keys, silos, auth policies, SCCM, LAPS |
+| `bloodyAD` | ✅ | **Write-side** AD privilege abuse — WriteOwner/WriteDACL/GenericAll, RBCD, shadow creds, DCsync |
 | `wenum` | ✅ | Fuzzer (equivalent to allowed DirBuster/gobuster) |
 | `gopherus` | ✅ | Generates SSRF **payloads** — operator manually delivers them |
 
@@ -266,6 +267,7 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `gopherus` | ✅ | SSRF payloads | pipx |
 | `ldapsearch-ad.py` | ✅ | AD LDAP enum | pipx |
 | `ldeep` | ✅ | In-depth AD LDAP enum (LAPS, silos, SCCM, etc.) | pipx |
+| `bloodyAD` | ✅ | AD write-side abuse (WriteOwner/DACL, RBCD, DCsync, shadow creds) | pipx |
 | `kinit`, `klist`, `kdestroy` | ✅ | Kerberos TGT request / manage | apt (`krb5-user`) |
 | `ntpdate` | ✅ | Sync clock before Kerberos ops | apt |
 | `rustscan` | ✅ | Fast port scanning | GitHub `.deb` |
