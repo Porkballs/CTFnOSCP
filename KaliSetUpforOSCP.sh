@@ -348,6 +348,15 @@ if ! command -v ldeep >/dev/null 2>&1; then
     pipx install ldeep || warn "pipx install ldeep failed"
 fi
 
+# ---- bloodyAD (CravateRouge) ------------------------------------------------
+# AD write-side privilege abuse — WriteOwner, WriteDACL, GenericAll, GenericWrite,
+# AddSelf, shadow credentials, RBCD, DCsync, password change, gMSA read.
+# Complements ldeep (which is read-only enumeration).
+echo "  bloodyAD..."
+if ! command -v bloodyAD >/dev/null 2>&1; then
+    pipx install bloodyAD || warn "pipx install bloodyAD failed"
+fi
+
 # ---- wenum (WebFuzzForge fork of wfuzz) -------------------------------------
 # Actively-maintained wfuzz fork. No PyPI release — installed from git.
 # Exposes 'wenum' globally on PATH via pipx.
