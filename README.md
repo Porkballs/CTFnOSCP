@@ -53,7 +53,7 @@ Tools are marked per **OffSec's OSCP+ Exam Guide** (not my own judgement). OffSe
 | `libsasl2-dev`, `libldap2-dev`, `libssl-dev` | ✅ | Build deps for `python-ldap` |
 | `krb5-user` | ✅ | Kerberos client — provides `kinit`, `klist`, `kdestroy` |
 | `libkrb5-dev`, `krb5-config` | ✅ | Kerberos dev headers (for building `gssapi`, `ldeep`) |
-| `ntpdate` | ✅ | Time sync — required before Kerberos ops (KRB_AP_ERR_SKEW if drift >5 min) |
+| `ntpsec-ntpdate` | ✅ | Time sync — required before Kerberos ops (KRB_AP_ERR_SKEW if drift >5 min) |
 
 ---
 
@@ -81,9 +81,9 @@ Also from `XSStrike/requirements.txt`: `python-Levenshtein`, `prettytable`, `req
 | `ldeep` | ✅ | **In-depth** LDAP enum — bitlocker keys, silos, auth policies, SCCM, LAPS |
 | `bloodyAD` | ✅ | **Write-side** AD privilege abuse — WriteOwner/WriteDACL/GenericAll, RBCD, shadow creds, DCsync |
 | `wenum` | ✅ | Fuzzer (equivalent to allowed DirBuster/gobuster) |
-| `gopherus` | ✅ | Generates SSRF **payloads** — operator manually delivers them |
+| `gopherus3` | ✅ | Generates SSRF **payloads** — operator manually delivers them |
 
-Note on `gopherus`: it doesn't auto-exploit — it generates payload strings you paste into your own request. Analogous to using `revshells.com` to build a reverse shell. Not a SQLmap-class tool.
+Note on `gopherus3`: it doesn't auto-exploit — it generates payload strings you paste into your own request. Analogous to using `revshells.com` to build a reverse shell. Not a SQLmap-class tool.
 
 ---
 
@@ -96,9 +96,9 @@ Note on `gopherus`: it doesn't auto-exploit — it generates payload strings you
 | `/opt/ligolo-ng/proxy` | ✅ | Tunneling proxy (symlinked to `/usr/local/bin/ligolo-proxy`) |
 | `/opt/ligolo-ng/agents/linux/agent` | ✅ | Ligolo Linux agent |
 | `/opt/ligolo-ng/agents/windows/agent.exe` | ✅ | Ligolo Windows agent |
-| `/opt/CyberChef/CyberChef.html` | ✅ | Offline CyberChef — `xdg-open /opt/CyberChef/CyberChef.html` |
-| `/opt/hacktricks/` | ✅ | HackTricks source — served at `http://localhost:3337` via Docker |
-| `/opt/hacktricks-cloud/` | ✅ | HackTricks Cloud source — served at `http://localhost:3338` via Docker |
+| `/opt/hacktricks/` | ✅ | HackTricks — served at `http://localhost:3337` via Docker (persistent) |
+| `/opt/hacktricks-cloud/` | ✅ | HackTricks Cloud — served at `http://localhost:3338` via Docker (persistent) |
+| CyberChef (Docker) | ✅ | `ghcr.io/gchq/cyberchef:latest` — served at `http://localhost:3339` (persistent) |
 | `/opt/XSStrike/` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for XSS |
 | `/opt/XXEinjector/` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for XXE |
 
@@ -118,6 +118,43 @@ Note on `gopherus`: it doesn't auto-exploit — it generates payload strings you
 | RustScan | ✅ | apt (from GitHub `.deb`) — port scanner |
 | Powerline fonts | ✅ | User-level install |
 | `rockyou.txt` extracted | ✅ | `/usr/share/wordlists/rockyou.txt` |
+
+### Persistent Docker services
+
+All three auto-start on boot via `--restart unless-stopped`. Check with `sudo docker ps`.
+
+| Container | URL | Image |
+|---|---|---|
+| `hacktricks` | http://localhost:3337 | `ghcr.io/hacktricks-wiki/hacktricks-cloud/translator-image` |
+| `hacktricks-cloud` | http://localhost:3338 | `ghcr.io/hacktricks-wiki/hacktricks-cloud/translator-image` |
+| `cyberchef` | http://localhost:3339 | `ghcr.io/gchq/cyberchef:latest` |
+
+Management:
+- Stop all: `sudo docker stop hacktricks hacktricks-cloud cyberchef`
+- Start all: `sudo docker start hacktricks hacktricks-cloud cyberchef`
+- Status: `sudo docker ps`
+- Logs: `sudo docker logs -f <container>`
+
+### Firefox bookmarks (enterprise policy)
+
+Added to the bookmarks toolbar via `policies.json` (survives profile resets). Restart Firefox to see them.
+
+| Bookmark | URL |
+|---|---|
+| HackTricks | http://localhost:3337 |
+| HackTricks Cloud | http://localhost:3338 |
+| CyberChef | http://localhost:3339 |
+
+Policy files: `/usr/lib/firefox-esr/distribution/policies.json` and `/etc/firefox/policies/policies.json`
+
+### Updates
+
+| What | Command |
+|---|---|
+| apt tools | `sudo apt update && sudo apt upgrade` |
+| Everything else | `sudo update-toolkit` (also runs weekly via `update-toolkit.timer`) |
+
+`update-toolkit` covers: pipx tools, pip libraries, /opt git clones (XSStrike, XXEinjector), all GitHub release binaries, raw GitHub scripts, CyberChef (docker pull), and HackTricks (git pull + container restart).
 
 ---
 
@@ -275,7 +312,7 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `ldeep` | ✅ | In-depth AD LDAP enum (LAPS, silos, SCCM, etc.) | pipx |
 | `bloodyAD` | ✅ | AD write-side abuse (WriteOwner/DACL, RBCD, DCsync, shadow creds) | pipx |
 | `kinit`, `klist`, `kdestroy` | ✅ | Kerberos TGT request / manage | apt (`krb5-user`) |
-| `ntpdate` | ✅ | Sync clock before Kerberos ops | apt |
+| `ntpdate` | ✅ | Sync clock before Kerberos ops | apt (`ntpsec-ntpdate`) |
 | `rustscan` | ✅ | Fast port scanning | GitHub `.deb` |
 | `ligolo-proxy` | ✅ | Reverse tunneling | `/opt/ligolo-ng/` |
 | `update-toolkit` | ✅ | Update CyberChef + HackTricks | `/usr/local/bin/` |
@@ -283,4 +320,4 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 
 ---
 
-*Classifications derived from the OSCP+ Exam Guide (help.offsec.com) and OSCP+ Exam FAQ. Regenerate this file after modifying `setup.sh`.*
+*Classifications derived from the OSCP+ Exam Guide (help.offsec.com) and OSCP+ Exam FAQ. Regenerate this file after modifying `KaliSetUpforOSCP.sh`.*
