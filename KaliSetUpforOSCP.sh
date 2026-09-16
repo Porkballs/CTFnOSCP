@@ -20,6 +20,15 @@ fi
 log() { printf '\n[*] %s\n' "$*"; }
 warn() { printf '\n[!] %s\n' "$*" >&2; }
 
+# Resolve "owner/repo" → latest GitHub release tag (e.g. v1.2.3).
+# Defined here so it's available throughout the entire script — not just
+# the toolkit section where it was previously first defined.
+gh_latest_tag() {
+    curl -sLI -o /dev/null -w '%{url_effective}' \
+        "https://github.com/$1/releases/latest" \
+        | sed -E 's|.*/tag/||; s|/$||'
+}
+
 # ---- System update + core packages ------------------------------------------
 
 # Add the official Sublime Text repository (modern signed-by approach;
@@ -780,13 +789,6 @@ fetch() {
         rm -f "$dest.tmp"
         printf '    [FAIL] %s  (%s)\n' "${dest#$TOOLKIT/}" "$url" >&2
     fi
-}
-
-gh_latest_tag() {
-    # Resolve "owner/repo" -> latest release tag (e.g. v1.2.3)
-    curl -sLI -o /dev/null -w '%{url_effective}' \
-        "https://github.com/$1/releases/latest" \
-        | sed -E 's|.*/tag/||; s|/$||'
 }
 
 log "Staging toolkit at $TOOLKIT ..."
