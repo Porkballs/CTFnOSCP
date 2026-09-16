@@ -67,7 +67,7 @@ $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
     krb5-user \
     libkrb5-dev \
     krb5-config \
-    ntpdate \
+    ntpsec-ntpdate \
     libsasl2-dev \
     libldap2-dev \
     libssl-dev
