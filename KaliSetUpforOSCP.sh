@@ -1,42 +1,4 @@
-#!/bin/bash
-#
-# Pentest box setup script
-#
-
-set -euo pipefail
-
-# ---- Setup ------------------------------------------------------------------
-
-# Resolve the script's own directory so relative file lookups don't depend on CWD
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Use sudo only if not already root
-if [ "$(id -u)" -eq 0 ]; then
-    SUDO=""
-else
-    SUDO="sudo"
-fi
-
-log() { printf '\n[*] %s\n' "$*"; }
-warn() { printf '\n[!] %s\n' "$*" >&2; }
-
-# Resolve "owner/repo" → latest GitHub release tag (e.g. v1.2.3).
-# Defined here so it's available throughout the entire script — not just
-# the toolkit section where it was previously first defined.
-gh_latest_tag() {
-    curl -sLI -o /dev/null -w '%{url_effective}' \
-        "https://github.com/$1/releases/latest" \
-        | sed -E 's|.*/tag/||; s|/$||'
-}
-
-# ---- System update + core packages ------------------------------------------
-
-# Add the official Sublime Text repository (modern signed-by approach;
-# apt-key is deprecated). Skips if any sublime-text source already exists,
-# regardless of keyring filename, to avoid Signed-By conflicts.
-if grep -rq 'download\.sublimetext\.com' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
-    log "Sublime Text repository already configured, skipping."
-elif [ ! -f /etc/apt/keyrings/sublimehq-archive.gpg ]; then
+[ ! -f /etc/apt/keyrings/sublimehq-archive.gpg ]; then
     log "Adding Sublime Text repository..."
     $SUDO install -d -m 0755 /etc/apt/keyrings
     curl -fsSL https://download.sublimetext.com/sublimehq-pub.gpg \
@@ -572,25 +534,46 @@ CC_LATEST=$(curl -sLI -o /dev/null -w '%{url_effective}' \
 CC_LATEST_VER="${CC_LATEST#v}"
 
 if [ -L /opt/CyberChef/CyberChef.html ]; then
-    CC_INSTALLED=$(basename "$(readlink /opt/CyberChef/CyberChef.html)" \
-        | sed 's/CyberChef_v//; s/\.html//')
+    CC_INSTALLED=$(cat "$CC_VER_FILE" 2>/dev/null || echo "none")
 else
     CC_INSTALLED="none"
 fi
+
+# ---- 6. CyberChef -----------------------------------------------------------
+log "Checking CyberChef..."
+CC_LATEST=$(curl -sLI -o /dev/null -w '%{url_effective}' \
+    https://github.com/gchq/CyberChef/releases/latest \
+    | sed -E 's|.*/tag/||; s|/$||')
+CC_LATEST_VER="${CC_LATEST#v}"
+
+# Version stored as the tag (e.g. v11.4.0) in a plain file
+CC_VER_FILE="/opt/CyberChef/.installed_version"
+CC_INSTALLED=$(cat "$CC_VER_FILE" 2>/dev/null || echo "none")
 
 if [ "$CC_LATEST_VER" = "$CC_INSTALLED" ]; then
     ok "CyberChef v${CC_LATEST_VER}"
 else
     upd "CyberChef ${CC_INSTALLED} → ${CC_LATEST_VER}"
     CC_ZIP="CyberChef_v${CC_LATEST_VER}.zip"
-    CC_HTML="CyberChef_v${CC_LATEST_VER}.html"
-    wget -q -O "/tmp/${CC_ZIP}" \
-        "https://github.com/gchq/CyberChef/releases/download/${CC_LATEST}/${CC_ZIP}"
-    unzip -o -j "/tmp/${CC_ZIP}" "$CC_HTML" -d /opt/CyberChef/ >/dev/null
-    ln -sf "/opt/CyberChef/${CC_HTML}" /opt/CyberChef/CyberChef.html
-    find /opt/CyberChef/ -name 'CyberChef_v*.html' ! -name "$CC_HTML" -delete 2>/dev/null || true
-    rm -f "/tmp/${CC_ZIP}"
-    ok "CyberChef updated to v${CC_LATEST_VER}"
+    TMP=$(mktemp -d)
+    if wget -q -O "$TMP/${CC_ZIP}" \
+        "https://github.com/gchq/CyberChef/releases/download/${CC_LATEST}/${CC_ZIP}"; then
+        # Clear old content, extract full zip (v10+ ships multiple modules, not one .html)
+        find /opt/CyberChef -mindepth 1 ! -name '.installed_version' -delete 2>/dev/null || true
+        unzip -o "$TMP/${CC_ZIP}" -d /opt/CyberChef/ >/dev/null
+        # Symlink entry point — works for both old single-file and new modular format
+        CC_INDEX=$(find /opt/CyberChef -maxdepth 3 -name "*.html" -not -name '.installed_version' -print -quit)
+        if [ -n "$CC_INDEX" ]; then
+            ln -sf "$CC_INDEX" /opt/CyberChef/CyberChef.html
+            echo "$CC_LATEST_VER" > "$CC_VER_FILE"
+            ok "CyberChef updated to v${CC_LATEST_VER}"
+        else
+            warn "CyberChef: no .html entry point found after extraction"
+        fi
+    else
+        warn "CyberChef download failed"
+    fi
+    rm -rf "$TMP"
 fi
 
 # ---- 7. HackTricks (git pull + Docker restart if changed) -------------------
@@ -661,23 +644,32 @@ $SUDO systemctl enable --now update-toolkit.timer 2>/dev/null \
     && log "update-toolkit timer enabled (weekly, persistent)" \
     || warn "Could not enable systemd timer (non-systemd env?)"
 
-# ---- CyberChef (offline single-file) ----------------------------------------
-# GCHQ publishes a fully self-contained .html per release. No web server needed
-# — open with: xdg-open /opt/CyberChef/CyberChef.html
+# CyberChef v10+ ships a zip of modules rather than a single .html file.
+# Extract the full zip; find the HTML entry point dynamically.
 log "Installing CyberChef (offline)..."
 CC_TAG=$(gh_latest_tag "gchq/CyberChef")
 if [ -n "$CC_TAG" ]; then
     CC_VER="${CC_TAG#v}"
     CC_ZIP="CyberChef_v${CC_VER}.zip"
-    CC_HTML="CyberChef_v${CC_VER}.html"
-    if [ ! -f /opt/CyberChef/CyberChef.html ]; then
+    if [ ! -L /opt/CyberChef/CyberChef.html ]; then
         $SUDO mkdir -p /opt/CyberChef
-        wget -q --show-progress -O "/tmp/${CC_ZIP}" \
-            "https://github.com/gchq/CyberChef/releases/download/${CC_TAG}/${CC_ZIP}" \
-            && $SUDO unzip -o -j "/tmp/${CC_ZIP}" "$CC_HTML" -d /opt/CyberChef/ >/dev/null \
-            && $SUDO ln -sf "/opt/CyberChef/${CC_HTML}" /opt/CyberChef/CyberChef.html \
-            && rm -f "/tmp/${CC_ZIP}" \
-            || warn "CyberChef download/extract failed"
+        if wget -q --show-progress -O "/tmp/${CC_ZIP}" \
+            "https://github.com/gchq/CyberChef/releases/download/${CC_TAG}/${CC_ZIP}"; then
+            $SUDO unzip -o "/tmp/${CC_ZIP}" -d /opt/CyberChef/ >/dev/null \
+                || warn "CyberChef unzip failed"
+            # Find the HTML entry point (works for both old single-file and new modular format)
+            CC_INDEX=$($SUDO find /opt/CyberChef -maxdepth 3 -name "*.html" -print -quit)
+            if [ -n "$CC_INDEX" ]; then
+                $SUDO ln -sf "$CC_INDEX" /opt/CyberChef/CyberChef.html
+                echo "$CC_VER" | $SUDO tee /opt/CyberChef/.installed_version > /dev/null
+                echo "    [ok] CyberChef v${CC_VER} → $CC_INDEX"
+            else
+                warn "CyberChef: no .html entry point found in zip"
+            fi
+            rm -f "/tmp/${CC_ZIP}"
+        else
+            warn "CyberChef download failed"
+        fi
     else
         echo "    [skip] CyberChef already installed"
     fi
