@@ -1,54 +1,4 @@
-[ ! -f /etc/apt/keyrings/sublimehq-archive.gpg ]; then
-    log "Adding Sublime Text repository..."
-    $SUDO install -d -m 0755 /etc/apt/keyrings
-    curl -fsSL https://download.sublimetext.com/sublimehq-pub.gpg \
-        | $SUDO gpg --dearmor -o /etc/apt/keyrings/sublimehq-archive.gpg
-    echo "deb [signed-by=/etc/apt/keyrings/sublimehq-archive.gpg] https://download.sublimetext.com/ apt/stable/" \
-        | $SUDO tee /etc/apt/sources.list.d/sublime-text.list >/dev/null
-fi
-
-log "Updating package lists and upgrading..."
-$SUDO apt-get update -y
-$SUDO DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
-
-log "Installing core tools..."
-# DEBIAN_FRONTEND=noninteractive prevents krb5-user's default-realm prompt
-# (and any other package's debconf prompts) from stalling the script.
-$SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    gedit \
-    sublime-text \
-    libreoffice \
-    seclists \
-    gobuster \
-    feroxbuster \
-    netexec \
-    sstimap \
-    chisel-common-binaries \
-    golang-go \
-    docker.io \
-    pipx \
-    unzip \
-    p7zip-full \
-    wget \
-    curl \
-    git \
-    build-essential \
-    python3-dev \
-    ruby \
-    krb5-user \
-    libkrb5-dev \
-    krb5-config \
-    ntpsec-ntpdate \
-    libsasl2-dev \
-    libldap2-dev \
-    libssl-dev
-
-# ---- Python deps ------------------------------------------------------------
-# Libraries (not applications), so pipx is the wrong tool. Install with pip
-# into the system Python (Kali enforces PEP 668, hence --break-system-packages).
-#   - python-ldap         : LDAP bindings (PowerView-py, windapsearch, etc.)
-#   - pyasn1 / -modules   : ASN.1 support, required by windapsearch.py
-#   - pylnk3              : LNK file parsing, required by hashgrab.py
+nk3              : LNK file parsing, required by hashgrab.py
 #   - ldap3               : pure-Python LDAP (used by bloodyAD, ldeep, etc.)
 #   - pycryptodome        : crypto backend for ldapsearch-ad NTLM auth
 #   - gssapi              : Python GSSAPI bindings — enables Kerberos auth
@@ -562,10 +512,15 @@ else
         find /opt/CyberChef -mindepth 1 ! -name '.installed_version' -delete 2>/dev/null || true
         unzip -o "$TMP/${CC_ZIP}" -d /opt/CyberChef/ >/dev/null
         # Symlink entry point — works for both old single-file and new modular format
-        CC_INDEX=$(find /opt/CyberChef -maxdepth 3 -name "*.html" -not -name '.installed_version' -print -quit)
+        CC_INDEX=$(find /opt/CyberChef -maxdepth 3 -name "*.html" -not -name 'index.html' -not -name '.installed_version' -print -quit)
         if [ -n "$CC_INDEX" ]; then
             ln -sf "$CC_INDEX" /opt/CyberChef/CyberChef.html
             echo "$CC_LATEST_VER" > "$CC_VER_FILE"
+            # Refresh the index.html redirect for the web service
+            CC_INDEX_REL="${CC_INDEX#/opt/CyberChef/}"
+            echo "<meta http-equiv='refresh' content='0; url=${CC_INDEX_REL}'>" \
+                > /opt/CyberChef/index.html
+            systemctl restart cyberchef.service 2>/dev/null || true
             ok "CyberChef updated to v${CC_LATEST_VER}"
         else
             warn "CyberChef: no .html entry point found after extraction"
@@ -662,6 +617,10 @@ if [ -n "$CC_TAG" ]; then
             if [ -n "$CC_INDEX" ]; then
                 $SUDO ln -sf "$CC_INDEX" /opt/CyberChef/CyberChef.html
                 echo "$CC_VER" | $SUDO tee /opt/CyberChef/.installed_version > /dev/null
+                # index.html redirect → Python http.server serves it as default doc
+                CC_INDEX_REL="${CC_INDEX#/opt/CyberChef/}"
+                echo "<meta http-equiv='refresh' content='0; url=${CC_INDEX_REL}'>" \
+                    | $SUDO tee /opt/CyberChef/index.html > /dev/null
                 echo "    [ok] CyberChef v${CC_VER} → $CC_INDEX"
             else
                 warn "CyberChef: no .html entry point found in zip"
@@ -677,10 +636,72 @@ else
     warn "Could not resolve CyberChef latest tag; skipping."
 fi
 
-# ---- HackTricks (full build, persistent Docker) -----------------------------
-# Both books are served via the official translator-image (which includes mdbook
-# + all HackTricks preprocessors). Containers use --restart unless-stopped so
-# they survive reboots automatically once Docker starts.
+# ---- CyberChef persistent web service ---------------------------------------
+# Serves /opt/CyberChef/ via Python http.server on port 3339.
+# index.html at the root auto-redirects to the versioned entry point so
+# http://localhost:3339 works as a stable URL regardless of version.
+log "Setting up CyberChef web service (port 3339)..."
+$SUDO tee /etc/systemd/system/cyberchef.service > /dev/null << 'CCSERVICE'
+[Unit]
+Description=CyberChef offline web server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m http.server 3339 --directory /opt/CyberChef
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+CCSERVICE
+
+$SUDO systemctl daemon-reload
+$SUDO systemctl enable --now cyberchef.service 2>/dev/null \
+    && log "CyberChef service enabled → http://localhost:3339" \
+    || warn "Could not enable cyberchef.service (non-systemd env?)"
+
+# ---- Firefox bookmarks (enterprise policy) ----------------------------------
+# Uses Firefox's built-in policy engine — no profile hacking needed.
+# Bookmarks appear in the toolbar on next Firefox launch.
+# Both policy paths are written for compatibility across Kali/Debian variants.
+log "Adding Firefox bookmarks (HackTricks + CyberChef)..."
+
+FF_POLICY='{
+  "policies": {
+    "Bookmarks": [
+      {
+        "Title": "HackTricks",
+        "URL": "http://localhost:3337",
+        "Placement": "toolbar"
+      },
+      {
+        "Title": "HackTricks Cloud",
+        "URL": "http://localhost:3338",
+        "Placement": "toolbar"
+      },
+      {
+        "Title": "CyberChef",
+        "URL": "http://localhost:3339",
+        "Placement": "toolbar"
+      }
+    ]
+  }
+}'
+
+# Primary path: firefox-esr install dir (works on all Linux)
+for FF_DIR in /usr/lib/firefox-esr /usr/lib/firefox; do
+    if [ -d "$FF_DIR" ]; then
+        $SUDO mkdir -p "$FF_DIR/distribution"
+        echo "$FF_POLICY" | $SUDO tee "$FF_DIR/distribution/policies.json" > /dev/null \
+            && echo "    [ok] $FF_DIR/distribution/policies.json"
+    fi
+done
+
+# Fallback path: /etc/firefox/policies (supported since Firefox 78)
+$SUDO mkdir -p /etc/firefox/policies
+echo "$FF_POLICY" | $SUDO tee /etc/firefox/policies/policies.json > /dev/null \
+    && echo "    [ok] /etc/firefox/policies/policies.json"
 #
 # Ports:
 #   http://localhost:3337 — HackTricks (main)
@@ -1194,8 +1215,15 @@ cat <<EOF
       - $WIN_EXES/agent.exe
       - $WIN_AD/proxy
 
-    CyberChef (offline):
-      - xdg-open /opt/CyberChef/CyberChef.html
+    CyberChef (persistent web service):
+      - http://localhost:3339  (auto-starts on boot via cyberchef.service)
+      - sudo systemctl status cyberchef.service
+
+    Firefox bookmarks:
+      - Added to toolbar via enterprise policy (restart Firefox to see them)
+      - HackTricks, HackTricks Cloud, CyberChef
+      - Policy files: /usr/lib/firefox-esr/distribution/policies.json
+                      /etc/firefox/policies/policies.json
 
     HackTricks (persistent Docker):
       - Main book:  http://localhost:3337  (building ~5 min on first boot)
