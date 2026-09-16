@@ -1,4 +1,92 @@
-nk3              : LNK file parsing, required by hashgrab.py
+#!/bin/bash
+#
+# Pentest box setup script
+#
+
+set -euo pipefail
+
+# ---- Setup ------------------------------------------------------------------
+
+# Resolve the script's own directory so relative file lookups don't depend on CWD
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Use sudo only if not already root
+if [ "$(id -u)" -eq 0 ]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
+log() { printf '\n[*] %s\n' "$*"; }
+warn() { printf '\n[!] %s\n' "$*" >&2; }
+
+# Resolve "owner/repo" → latest GitHub release tag (e.g. v1.2.3).
+# Defined here so it's available throughout the entire script — not just
+# the toolkit section where it was previously first defined.
+gh_latest_tag() {
+    curl -sLI -o /dev/null -w '%{url_effective}' \
+        "https://github.com/$1/releases/latest" \
+        | sed -E 's|.*/tag/||; s|/$||'
+}
+
+# ---- System update + core packages ------------------------------------------
+
+# Add the official Sublime Text repository (modern signed-by approach;
+# apt-key is deprecated). Skips if any sublime-text source already exists,
+# regardless of keyring filename, to avoid Signed-By conflicts.
+if grep -rq 'download\.sublimetext\.com' /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
+    log "Sublime Text repository already configured, skipping."
+elif [ ! -f /etc/apt/keyrings/sublimehq-archive.gpg ]; then
+    log "Adding Sublime Text repository..."
+    $SUDO install -d -m 0755 /etc/apt/keyrings
+    curl -fsSL https://download.sublimetext.com/sublimehq-pub.gpg \
+        | $SUDO gpg --dearmor -o /etc/apt/keyrings/sublimehq-archive.gpg
+    echo "deb [signed-by=/etc/apt/keyrings/sublimehq-archive.gpg] https://download.sublimetext.com/ apt/stable/" \
+        | $SUDO tee /etc/apt/sources.list.d/sublime-text.list >/dev/null
+fi
+
+log "Updating package lists and upgrading..."
+$SUDO apt-get update -y
+$SUDO DEBIAN_FRONTEND=noninteractive apt-get upgrade -y
+
+log "Installing core tools..."
+# DEBIAN_FRONTEND=noninteractive prevents krb5-user's default-realm prompt
+# (and any other package's debconf prompts) from stalling the script.
+$SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    gedit \
+    sublime-text \
+    libreoffice \
+    seclists \
+    gobuster \
+    feroxbuster \
+    netexec \
+    sstimap \
+    chisel-common-binaries \
+    golang-go \
+    docker.io \
+    pipx \
+    unzip \
+    p7zip-full \
+    wget \
+    curl \
+    git \
+    build-essential \
+    python3-dev \
+    ruby \
+    krb5-user \
+    libkrb5-dev \
+    krb5-config \
+    ntpsec-ntpdate \
+    libsasl2-dev \
+    libldap2-dev \
+    libssl-dev
+
+# ---- Python deps ------------------------------------------------------------
+# Libraries (not applications), so pipx is the wrong tool. Install with pip
+# into the system Python (Kali enforces PEP 668, hence --break-system-packages).
+#   - python-ldap         : LDAP bindings (PowerView-py, windapsearch, etc.)
+#   - pyasn1 / -modules   : ASN.1 support, required by windapsearch.py
+#   - pylnk3              : LNK file parsing, required by hashgrab.py
 #   - ldap3               : pure-Python LDAP (used by bloodyAD, ldeep, etc.)
 #   - pycryptodome        : crypto backend for ldapsearch-ad NTLM auth
 #   - gssapi              : Python GSSAPI bindings — enables Kerberos auth
@@ -601,36 +689,42 @@ $SUDO systemctl enable --now update-toolkit.timer 2>/dev/null \
 
 # CyberChef v10+ ships a zip of modules rather than a single .html file.
 # Extract the full zip; find the HTML entry point dynamically.
+# Success indicator: /opt/CyberChef/index.html (created only after full install)
 log "Installing CyberChef (offline)..."
 CC_TAG=$(gh_latest_tag "gchq/CyberChef")
 if [ -n "$CC_TAG" ]; then
     CC_VER="${CC_TAG#v}"
     CC_ZIP="CyberChef_v${CC_VER}.zip"
-    if [ ! -L /opt/CyberChef/CyberChef.html ]; then
+    # Use index.html as the reliable success indicator (not the symlink)
+    # This also catches the case where the dir exists but is empty (from a failed run)
+    if [ ! -f /opt/CyberChef/index.html ]; then
         $SUDO mkdir -p /opt/CyberChef
-        if wget -q --show-progress -O "/tmp/${CC_ZIP}" \
-            "https://github.com/gchq/CyberChef/releases/download/${CC_TAG}/${CC_ZIP}"; then
-            $SUDO unzip -o "/tmp/${CC_ZIP}" -d /opt/CyberChef/ >/dev/null \
-                || warn "CyberChef unzip failed"
-            # Find the HTML entry point (works for both old single-file and new modular format)
+        echo "    Downloading CyberChef ${CC_TAG}..."
+        if wget --show-progress -O "/tmp/${CC_ZIP}" \
+            "https://github.com/gchq/CyberChef/releases/download/${CC_TAG}/${CC_ZIP}" 2>&1; then
+            echo "    Extracting..."
+            $SUDO unzip -q -o "/tmp/${CC_ZIP}" -d /opt/CyberChef/ \
+                || warn "CyberChef unzip failed — check /tmp/${CC_ZIP}"
+            # Find the HTML entry point dynamically (single-file or modular format)
             CC_INDEX=$($SUDO find /opt/CyberChef -maxdepth 3 -name "*.html" -print -quit)
             if [ -n "$CC_INDEX" ]; then
                 $SUDO ln -sf "$CC_INDEX" /opt/CyberChef/CyberChef.html
                 echo "$CC_VER" | $SUDO tee /opt/CyberChef/.installed_version > /dev/null
-                # index.html redirect → Python http.server serves it as default doc
+                # index.html redirect — Python http.server uses it as default doc
                 CC_INDEX_REL="${CC_INDEX#/opt/CyberChef/}"
                 echo "<meta http-equiv='refresh' content='0; url=${CC_INDEX_REL}'>" \
                     | $SUDO tee /opt/CyberChef/index.html > /dev/null
-                echo "    [ok] CyberChef v${CC_VER} → $CC_INDEX"
+                echo "    [ok] CyberChef v${CC_VER} installed (entry: ${CC_INDEX_REL})"
             else
-                warn "CyberChef: no .html entry point found in zip"
+                warn "CyberChef: no .html entry point found — listing extracted files:"
+                $SUDO find /opt/CyberChef -maxdepth 3 | head -20
             fi
             rm -f "/tmp/${CC_ZIP}"
         else
-            warn "CyberChef download failed"
+            warn "CyberChef download failed (tag=${CC_TAG}, file=${CC_ZIP})"
         fi
     else
-        echo "    [skip] CyberChef already installed"
+        echo "    [skip] CyberChef already installed (v$(cat /opt/CyberChef/.installed_version 2>/dev/null || echo '?'))"
     fi
 else
     warn "Could not resolve CyberChef latest tag; skipping."
