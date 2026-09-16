@@ -236,7 +236,7 @@ fi
 
 # ---- update-toolkit (update script + systemd timer) -------------------------
 # Manages updates for tools that don't come from apt:
-#   - CyberChef  : checks latest GitHub release, downloads only if newer
+#   - CyberChef  : docker pull latest, recreate container if image changed
 #   - HackTricks : git pull both repos, docker restart only if new commits landed
 #
 # Installed at /usr/local/bin/update-toolkit (run manually: sudo update-toolkit)
@@ -326,8 +326,8 @@ force_fetch() {
 log "Upgrading pipx tools..."
 # upgrade-all handles PyPI-sourced packages (ldapsearchad, ldeep, bloodyAD)
 pipx upgrade-all --quiet 2>/dev/null || true
-# Git-sourced packages (wenum, gopherus) need reinstall to pick up new commits
-for pkg in wenum gopherus; do
+# Git-sourced packages (wenum, gopherus3) need reinstall to pick up new commits
+for pkg in wenum gopherus3; do
     pipx reinstall "$pkg" --quiet 2>/dev/null \
         && ok "$pkg (git reinstall)" \
         || warn "$pkg reinstall failed"
@@ -427,16 +427,29 @@ if needs_update "windapsearch" "ropnop/go-windapsearch"; then
     set_ver "windapsearch" "$LATEST_TAG"
 fi
 
-# SharpHound
+# SharpHound — resolve actual zip URL via GitHub API (filename changes between releases)
 if needs_update "sharphound" "SpecterOps/SharpHound"; then
     TMP=$(mktemp -d); trap 'rm -rf "$TMP"' RETURN
-    wget -q -O "$TMP/sh.zip" \
-        "https://github.com/SpecterOps/SharpHound/releases/download/${LATEST_TAG}/sharphound-${LATEST_TAG}.zip"
-    unzip -o -j "$TMP/sh.zip" "SharpHound.exe" "SharpHound.ps1" -d "$WIN_AD/" >/dev/null 2>&1
-    cp "$WIN_AD/SharpHound.exe" "$WIN_ROOT/SharpHound.exe" 2>/dev/null || true
-    cp "$WIN_AD/SharpHound.ps1" "$WIN_ROOT/SharpHound.ps1" 2>/dev/null || true
+    SH_URL=$(curl -sL "https://api.github.com/repos/SpecterOps/SharpHound/releases/latest" \
+        | grep '"browser_download_url"' \
+        | grep '\.zip"' \
+        | grep -vi "source" \
+        | head -1 \
+        | cut -d'"' -f4)
+    if [ -n "$SH_URL" ]; then
+        wget -q -O "$TMP/sh.zip" "$SH_URL"
+        mkdir -p "$TMP/sh_inner"
+        unzip -o "$TMP/sh.zip" -d "$TMP/sh_inner/" >/dev/null 2>&1
+        find "$TMP/sh_inner" -name "SharpHound.exe" -exec cp {} "$WIN_AD/" \; 2>/dev/null
+        find "$TMP/sh_inner" -name "SharpHound.ps1" -exec cp {} "$WIN_AD/" \; 2>/dev/null
+        cp "$WIN_AD/SharpHound.exe" "$WIN_ROOT/SharpHound.exe" 2>/dev/null || true
+        cp "$WIN_AD/SharpHound.ps1" "$WIN_ROOT/SharpHound.ps1" 2>/dev/null || true
+        set_ver "sharphound" "$LATEST_TAG"
+        ok "SharpHound $LATEST_TAG"
+    else
+        warn "SharpHound: could not resolve asset URL from GitHub API"
+    fi
     trap - RETURN; rm -rf "$TMP"
-    set_ver "sharphound" "$LATEST_TAG"
 fi
 
 # Snaffler
@@ -564,59 +577,23 @@ force_fetch "https://raw.githubusercontent.com/pentestmonkey/unix-privesc-check/
 force_fetch "https://raw.githubusercontent.com/xct/hashgrab/main/hashgrab.py"                             "$LIN_TOOLS/hashgrab.py"
 chmod +x "$LIN_TOOLS/lse.sh" "$LIN_TOOLS/unix-privesc-check" "$LIN_TOOLS/hashgrab.py" 2>/dev/null || true
 
-# ---- 6. CyberChef -----------------------------------------------------------
+# ---- 6. CyberChef (docker pull, restart only if new image) ------------------
 log "Checking CyberChef..."
-CC_LATEST=$(curl -sLI -o /dev/null -w '%{url_effective}' \
-    https://github.com/gchq/CyberChef/releases/latest \
-    | sed -E 's|.*/tag/||; s|/$||')
-CC_LATEST_VER="${CC_LATEST#v}"
-
-if [ -L /opt/CyberChef/CyberChef.html ]; then
-    CC_INSTALLED=$(cat "$CC_VER_FILE" 2>/dev/null || echo "none")
+PULL_OUT=$(docker pull ghcr.io/gchq/cyberchef:latest 2>&1)
+if echo "$PULL_OUT" | grep -q "Downloaded newer image"; then
+    # New image — recreate container so it uses the updated image
+    docker rm -f cyberchef 2>/dev/null || true
+    docker run -d \
+        --name cyberchef \
+        --restart unless-stopped \
+        -p 3339:8080 \
+        ghcr.io/gchq/cyberchef:latest \
+        && ok "CyberChef updated to latest image" \
+        || warn "CyberChef container restart failed"
+elif echo "$PULL_OUT" | grep -q "Image is up to date"; then
+    ok "CyberChef is current"
 else
-    CC_INSTALLED="none"
-fi
-
-# ---- 6. CyberChef -----------------------------------------------------------
-log "Checking CyberChef..."
-CC_LATEST=$(curl -sLI -o /dev/null -w '%{url_effective}' \
-    https://github.com/gchq/CyberChef/releases/latest \
-    | sed -E 's|.*/tag/||; s|/$||')
-CC_LATEST_VER="${CC_LATEST#v}"
-
-# Version stored as the tag (e.g. v11.4.0) in a plain file
-CC_VER_FILE="/opt/CyberChef/.installed_version"
-CC_INSTALLED=$(cat "$CC_VER_FILE" 2>/dev/null || echo "none")
-
-if [ "$CC_LATEST_VER" = "$CC_INSTALLED" ]; then
-    ok "CyberChef v${CC_LATEST_VER}"
-else
-    upd "CyberChef ${CC_INSTALLED} → ${CC_LATEST_VER}"
-    CC_ZIP="CyberChef_v${CC_LATEST_VER}.zip"
-    TMP=$(mktemp -d)
-    if wget -q -O "$TMP/${CC_ZIP}" \
-        "https://github.com/gchq/CyberChef/releases/download/${CC_LATEST}/${CC_ZIP}"; then
-        # Clear old content, extract full zip (v10+ ships multiple modules, not one .html)
-        find /opt/CyberChef -mindepth 1 ! -name '.installed_version' -delete 2>/dev/null || true
-        unzip -o "$TMP/${CC_ZIP}" -d /opt/CyberChef/ >/dev/null
-        # Symlink entry point — works for both old single-file and new modular format
-        CC_INDEX=$(find /opt/CyberChef -maxdepth 3 -name "*.html" -not -name 'index.html' -not -name '.installed_version' -print -quit)
-        if [ -n "$CC_INDEX" ]; then
-            ln -sf "$CC_INDEX" /opt/CyberChef/CyberChef.html
-            echo "$CC_LATEST_VER" > "$CC_VER_FILE"
-            # Refresh the index.html redirect for the web service
-            CC_INDEX_REL="${CC_INDEX#/opt/CyberChef/}"
-            echo "<meta http-equiv='refresh' content='0; url=${CC_INDEX_REL}'>" \
-                > /opt/CyberChef/index.html
-            systemctl restart cyberchef.service 2>/dev/null || true
-            ok "CyberChef updated to v${CC_LATEST_VER}"
-        else
-            warn "CyberChef: no .html entry point found after extraction"
-        fi
-    else
-        warn "CyberChef download failed"
-    fi
-    rm -rf "$TMP"
+    warn "CyberChef pull unexpected output: $PULL_OUT"
 fi
 
 # ---- 7. HackTricks (git pull + Docker restart if changed) -------------------
@@ -687,73 +664,25 @@ $SUDO systemctl enable --now update-toolkit.timer 2>/dev/null \
     && log "update-toolkit timer enabled (weekly, persistent)" \
     || warn "Could not enable systemd timer (non-systemd env?)"
 
-# CyberChef v10+ ships a zip of modules rather than a single .html file.
-# Extract the full zip; find the HTML entry point dynamically.
-# Success indicator: /opt/CyberChef/index.html (created only after full install)
-log "Installing CyberChef (offline)..."
-CC_TAG=$(gh_latest_tag "gchq/CyberChef")
-if [ -n "$CC_TAG" ]; then
-    CC_VER="${CC_TAG#v}"
-    CC_ZIP="CyberChef_v${CC_VER}.zip"
-    # Use index.html as the reliable success indicator (not the symlink)
-    # This also catches the case where the dir exists but is empty (from a failed run)
-    if [ ! -f /opt/CyberChef/index.html ]; then
-        $SUDO mkdir -p /opt/CyberChef
-        echo "    Downloading CyberChef ${CC_TAG}..."
-        if wget --show-progress -O "/tmp/${CC_ZIP}" \
-            "https://github.com/gchq/CyberChef/releases/download/${CC_TAG}/${CC_ZIP}" 2>&1; then
-            echo "    Extracting..."
-            $SUDO unzip -q -o "/tmp/${CC_ZIP}" -d /opt/CyberChef/ \
-                || warn "CyberChef unzip failed — check /tmp/${CC_ZIP}"
-            # Find the HTML entry point dynamically (single-file or modular format)
-            CC_INDEX=$($SUDO find /opt/CyberChef -maxdepth 3 -name "*.html" -print -quit)
-            if [ -n "$CC_INDEX" ]; then
-                $SUDO ln -sf "$CC_INDEX" /opt/CyberChef/CyberChef.html
-                echo "$CC_VER" | $SUDO tee /opt/CyberChef/.installed_version > /dev/null
-                # index.html redirect — Python http.server uses it as default doc
-                CC_INDEX_REL="${CC_INDEX#/opt/CyberChef/}"
-                echo "<meta http-equiv='refresh' content='0; url=${CC_INDEX_REL}'>" \
-                    | $SUDO tee /opt/CyberChef/index.html > /dev/null
-                echo "    [ok] CyberChef v${CC_VER} installed (entry: ${CC_INDEX_REL})"
-            else
-                warn "CyberChef: no .html entry point found — listing extracted files:"
-                $SUDO find /opt/CyberChef -maxdepth 3 | head -20
-            fi
-            rm -f "/tmp/${CC_ZIP}"
-        else
-            warn "CyberChef download failed (tag=${CC_TAG}, file=${CC_ZIP})"
-        fi
-    else
-        echo "    [skip] CyberChef already installed (v$(cat /opt/CyberChef/.installed_version 2>/dev/null || echo '?'))"
-    fi
+# ---- CyberChef (Docker, pre-built image) ------------------------------------
+# Uses the official GHCR image — no build step needed.
+# Persistent via --restart unless-stopped (same pattern as HackTricks).
+# http://localhost:3339
+log "Installing CyberChef (Docker)..."
+$SUDO docker pull ghcr.io/gchq/cyberchef:latest \
+    || warn "CyberChef image pull failed"
+
+if ! $SUDO docker inspect cyberchef >/dev/null 2>&1; then
+    $SUDO docker run -d \
+        --name cyberchef \
+        --restart unless-stopped \
+        -p 3339:8080 \
+        ghcr.io/gchq/cyberchef:latest \
+        && log "CyberChef running → http://localhost:3339" \
+        || warn "Failed to start CyberChef container"
 else
-    warn "Could not resolve CyberChef latest tag; skipping."
+    echo "    [skip] CyberChef container already exists"
 fi
-
-# ---- CyberChef persistent web service ---------------------------------------
-# Serves /opt/CyberChef/ via Python http.server on port 3339.
-# index.html at the root auto-redirects to the versioned entry point so
-# http://localhost:3339 works as a stable URL regardless of version.
-log "Setting up CyberChef web service (port 3339)..."
-$SUDO tee /etc/systemd/system/cyberchef.service > /dev/null << 'CCSERVICE'
-[Unit]
-Description=CyberChef offline web server
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/python3 -m http.server 3339 --directory /opt/CyberChef
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-CCSERVICE
-
-$SUDO systemctl daemon-reload
-$SUDO systemctl enable --now cyberchef.service 2>/dev/null \
-    && log "CyberChef service enabled → http://localhost:3339" \
-    || warn "Could not enable cyberchef.service (non-systemd env?)"
 
 # ---- Firefox bookmarks (enterprise policy) ----------------------------------
 # Uses Firefox's built-in policy engine — no profile hacking needed.
@@ -811,7 +740,7 @@ log "Setting up HackTricks (full build, persistent)..."
 
 # Clone / update content repos
 if [ ! -d /opt/hacktricks ]; then
-    $SUDO git clone --depth 1 https://github.com/HackTricks-wiki/hacktricks /opt/hacktricks \
+    $SUDO git clone https://github.com/HackTricks-wiki/hacktricks /opt/hacktricks \
         || warn "HackTricks clone failed"
 else
     $SUDO git -C /opt/hacktricks pull --ff-only >/dev/null 2>&1 \
@@ -820,7 +749,7 @@ else
 fi
 
 if [ ! -d /opt/hacktricks-cloud ]; then
-    $SUDO git clone --depth 1 https://github.com/HackTricks-wiki/hacktricks-cloud /opt/hacktricks-cloud \
+    $SUDO git clone https://github.com/HackTricks-wiki/hacktricks-cloud /opt/hacktricks-cloud \
         || warn "HackTricks Cloud clone failed"
 else
     $SUDO git -C /opt/hacktricks-cloud pull --ff-only >/dev/null 2>&1 \
@@ -832,8 +761,47 @@ fi
 log "Pulling HackTricks Docker image (first run takes a few minutes)..."
 $SUDO docker pull "$HT_IMAGE" || warn "Docker image pull failed — containers may not start"
 
+# De-duplicate SUMMARY.md entries — upstream occasionally ships a duplicate
+# file reference which makes mdbook panic (exit 101) and the container
+# restart-loops. This drops any line linking to a .md path already linked
+# earlier in the file, leaving all other lines (headers, blanks) untouched.
+# Uses portable awk (no gawk extensions) so it runs on mawk (Kali default).
+dedup_summary() {
+    local dir="$1" summary="$1/src/SUMMARY.md"
+    [ -f "$summary" ] || return
+    local before after
+    before=$(wc -l < "$summary")
+    $SUDO awk '
+        {
+            line = $0
+            # Extract text between the last "(" and the following ")"
+            key = ""
+            if (index(line, ".md)") > 0) {
+                n = split(line, parts, "(")
+                cand = parts[n]                    # text after last (
+                sub(/\).*/, "", cand)              # strip from ) onward
+                if (cand ~ /\.md$/) key = cand
+            }
+            if (key != "") {
+                if (key in seen) next
+                seen[key] = 1
+            }
+            print
+        }
+    ' "$summary" > /tmp/SUMMARY.dedup 2>/dev/null \
+        && $SUDO cp /tmp/SUMMARY.dedup "$summary" && rm -f /tmp/SUMMARY.dedup
+    after=$(wc -l < "$summary")
+    [ "$before" != "$after" ] && echo "    [fixed] removed $((before-after)) duplicate entry(s) from $(basename "$dir")/SUMMARY.md"
+    # Keep the container's git from reverting our edit
+    $SUDO git -C "$dir" update-index --assume-unchanged src/SUMMARY.md 2>/dev/null || true
+}
+dedup_summary /opt/hacktricks
+dedup_summary /opt/hacktricks-cloud
+
 # Helper: launch or restart a HackTricks container
 # Usage: hacktricks_container <name> <host_port> <volume_path>
+# Command mirrors the official docs exactly, with --restart unless-stopped
+# instead of --rm for persistence.
 hacktricks_container() {
     local name="$1" port="$2" vol="$3"
     if $SUDO docker inspect "$name" >/dev/null 2>&1; then
@@ -1015,9 +983,9 @@ fi
 # ---- Gopherus (Esonhugh/Gopherus3 — Python 3 fork of tarunkant/Gopherus) ----
 # The original tarunkant/Gopherus is unmaintained (Python 2, PR#18 open since
 # 2022). Esonhugh/Gopherus3 is the active Python 3 refactor with argparse CLI
-# and adds SMTP/expanded memcache modules. Exposes 'gopherus' on PATH.
+# and adds SMTP/expanded memcache modules. Exposes 'gopherus3' on PATH.
 echo "  gopherus (Gopherus3)..."
-if ! command -v gopherus >/dev/null 2>&1; then
+if ! command -v gopherus3 >/dev/null 2>&1; then
     pipx install git+https://github.com/Esonhugh/Gopherus3.git || warn "pipx install Gopherus3 failed"
 fi
 
@@ -1058,14 +1026,39 @@ if [ ! -f /usr/local/bin/xxeinjector ]; then
     $SUDO chmod +x /usr/local/bin/xxeinjector
 fi
 
-# ---- SharpHound (BloodHound collector) --------------------------------------
-# Repo moved BloodHoundAD -> SpecterOps; asset name is LOWERCASE sharphound-*
+# SharpHound — resolve actual zip asset via GitHub API (filename changes between releases)
 echo "  SharpHound..."
 TAG=$(gh_latest_tag "SpecterOps/SharpHound")
 if [ -n "$TAG" ]; then
-    fetch "https://github.com/SpecterOps/SharpHound/releases/download/${TAG}/sharphound-${TAG}.zip" "$WIN_AD/SharpHound.zip"
-    if [ -f "$WIN_AD/SharpHound.zip" ] && [ ! -f "$WIN_AD/SharpHound.exe" ]; then
-        unzip -o -j "$WIN_AD/SharpHound.zip" "SharpHound.exe" "SharpHound.ps1" -d "$WIN_AD/" >/dev/null 2>&1
+    SH_URL=$(curl -sL "https://api.github.com/repos/SpecterOps/SharpHound/releases/latest" \
+        | grep '"browser_download_url"' \
+        | grep '\.zip"' \
+        | grep -vi "source\|Source" \
+        | head -1 \
+        | cut -d'"' -f4)
+    if [ -n "$SH_URL" ]; then
+        fetch "$SH_URL" "$WIN_AD/SharpHound.zip"
+        # Re-download if the existing zip is corrupt (e.g. a saved 404 page from an earlier run)
+        if [ -f "$WIN_AD/SharpHound.zip" ] && ! unzip -t "$WIN_AD/SharpHound.zip" >/dev/null 2>&1; then
+            warn "  SharpHound.zip is corrupt — re-downloading"
+            rm -f "$WIN_AD/SharpHound.zip"
+            wget -q -O "$WIN_AD/SharpHound.zip" "$SH_URL"
+        fi
+        if [ -f "$WIN_AD/SharpHound.zip" ] && [ ! -f "$WIN_AD/SharpHound.exe" ]; then
+            SH_TMP=$(mktemp -d)
+            if unzip -o "$WIN_AD/SharpHound.zip" -d "$SH_TMP/" >/dev/null 2>&1; then
+                find "$SH_TMP" -name "SharpHound.exe" -exec cp {} "$WIN_AD/" \; 2>/dev/null
+                find "$SH_TMP" -name "SharpHound.ps1" -exec cp {} "$WIN_AD/" \; 2>/dev/null
+                [ -f "$WIN_AD/SharpHound.exe" ] \
+                    && echo "    [ok]   Windows/AD/SharpHound.exe extracted" \
+                    || warn "  SharpHound.exe not found inside zip"
+            else
+                warn "  SharpHound.zip could not be extracted"
+            fi
+            rm -rf "$SH_TMP"
+        fi
+    else
+        warn "  SharpHound: could not resolve asset URL from GitHub API"
     fi
 fi
 
@@ -1309,9 +1302,10 @@ cat <<EOF
       - $WIN_EXES/agent.exe
       - $WIN_AD/proxy
 
-    CyberChef (persistent web service):
-      - http://localhost:3339  (auto-starts on boot via cyberchef.service)
-      - sudo systemctl status cyberchef.service
+    CyberChef (Docker):
+      - http://localhost:3339  (restarts automatically on reboot)
+      - sudo docker ps | grep cyberchef
+      - sudo docker logs cyberchef
 
     Firefox bookmarks:
       - Added to toolbar via enterprise policy (restart Firefox to see them)
