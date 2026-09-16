@@ -46,6 +46,7 @@ log "Installing core tools..."
 $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
     gedit \
     sublime-text \
+    libreoffice \
     seclists \
     gobuster \
     feroxbuster \
@@ -53,6 +54,7 @@ $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
     sstimap \
     chisel-common-binaries \
     golang-go \
+    docker.io \
     pipx \
     unzip \
     p7zip-full \
@@ -92,6 +94,18 @@ $SUDO pip install --break-system-packages \
     gssapi
 
 pipx ensurepath
+
+# ---- Docker service ---------------------------------------------------------
+# Enable so containers with --restart always survive reboots.
+log "Enabling Docker service..."
+$SUDO systemctl enable docker --now 2>/dev/null || warn "Could not enable Docker (non-systemd env?)"
+
+# Add current user to the docker group so docker commands don't need sudo.
+# Takes effect on next login — for this session use: newgrp docker
+if ! groups "$USER" | grep -qw docker; then
+    $SUDO usermod -aG docker "$USER"
+    log "Added $USER to docker group (takes effect on next login)"
+fi
 
 # ---- Rockyou ----------------------------------------------------------------
 
@@ -211,6 +225,525 @@ else
     echo "      Windows agent: /opt/ligolo-ng/agents/windows/agent.exe"
 fi
 
+# ---- update-toolkit (update script + systemd timer) -------------------------
+# Manages updates for tools that don't come from apt:
+#   - CyberChef  : checks latest GitHub release, downloads only if newer
+#   - HackTricks : git pull both repos, docker restart only if new commits landed
+#
+# Installed at /usr/local/bin/update-toolkit (run manually: sudo update-toolkit)
+# Systemd timer runs it weekly and persists the last-run time across reboots.
+
+log "Installing update-toolkit script and systemd timer..."
+
+$SUDO tee /usr/local/bin/update-toolkit > /dev/null << 'UPDATE_SCRIPT'
+#!/bin/bash
+# update-toolkit — update all non-apt tools
+# Run manually: sudo update-toolkit
+# Run automatically: weekly systemd timer (update-toolkit.timer)
+#
+# Tools managed:
+#   apt upgrade  : handles gedit, sublime, feroxbuster, netexec, sstimap,
+#                  chisel, golang, docker, krb5, ntpdate, ruby, seclists, etc.
+#   THIS SCRIPT  : everything else (see sections below)
+
+set -euo pipefail
+
+log()  { printf '\n[*] %s\n' "$*"; }
+ok()   { printf '    [ok]      %s\n' "$*"; }
+skip() { printf '    [skip]    %s\n' "$*"; }
+upd()  { printf '    [update]  %s\n' "$*"; }
+warn() { printf '\n[!] %s\n' "$*" >&2; }
+
+# ---- Config / state ---------------------------------------------------------
+CONFIG_FILE="/opt/.toolkit-config"
+VERSIONS_FILE="/opt/.toolkit-versions"
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    warn "$CONFIG_FILE not found — run setup.sh first."; exit 1
+fi
+# shellcheck disable=SC1090
+source "$CONFIG_FILE"
+
+TOOLKIT_PATH="${TOOLKIT_PATH:-$HOME/Toolkit}"
+WIN_AD="$TOOLKIT_PATH/Windows/AD"
+WIN_EXES="$TOOLKIT_PATH/Windows/EXEs"
+WIN_ROOT="$TOOLKIT_PATH/Windows"
+LIN_TOOLS="$TOOLKIT_PATH/LinuxTools"
+
+touch "$VERSIONS_FILE"
+
+# ---- Helpers ----------------------------------------------------------------
+gh_latest_tag() {
+    curl -sLI -o /dev/null -w '%{url_effective}' \
+        "https://github.com/$1/releases/latest" \
+        | sed -E 's|.*/tag/||; s|/$||'
+}
+
+get_ver() { grep "^${1}=" "$VERSIONS_FILE" 2>/dev/null | cut -d= -f2 || echo "none"; }
+set_ver() {
+    if grep -q "^${1}=" "$VERSIONS_FILE" 2>/dev/null; then
+        sed -i "s|^${1}=.*|${1}=${2}|" "$VERSIONS_FILE"
+    else
+        echo "${1}=${2}" >> "$VERSIONS_FILE"
+    fi
+}
+
+# Returns 0 (update needed, LATEST_TAG+LATEST_VER set) or 1 (already current)
+needs_update() {
+    local key="$1" repo="$2"
+    LATEST_TAG=$(gh_latest_tag "$repo")
+    LATEST_VER="${LATEST_TAG#v}"
+    local stored; stored=$(get_ver "$key")
+    if [ "$LATEST_TAG" = "$stored" ]; then
+        skip "$key $LATEST_TAG"; return 1
+    fi
+    upd "$key: $stored → $LATEST_TAG"; return 0
+}
+
+# Always download — for raw GitHub master-branch files (no versioning)
+force_fetch() {
+    local url="$1" dest="$2"
+    mkdir -p "$(dirname "$dest")"
+    if wget -q -O "${dest}.tmp" "$url"; then
+        mv "${dest}.tmp" "$dest"
+        ok "$(basename "$dest")"
+    else
+        rm -f "${dest}.tmp"
+        warn "FAIL: $(basename "$dest")  ($url)"
+    fi
+}
+
+# ---- 1. pipx tools ----------------------------------------------------------
+log "Upgrading pipx tools..."
+# upgrade-all handles PyPI-sourced packages (ldapsearchad, ldeep, bloodyAD)
+pipx upgrade-all --quiet 2>/dev/null || true
+# Git-sourced packages (wenum, gopherus) need reinstall to pick up new commits
+for pkg in wenum gopherus; do
+    pipx reinstall "$pkg" --quiet 2>/dev/null \
+        && ok "$pkg (git reinstall)" \
+        || warn "$pkg reinstall failed"
+done
+
+# ---- 2. Python system libraries ---------------------------------------------
+log "Upgrading Python system libraries..."
+pip install --break-system-packages --upgrade --quiet \
+    python-ldap 'pyasn1>=0.4.5' 'pyasn1-modules>=0.2.5' \
+    pylnk3 ldap3 pycryptodome gssapi \
+    && ok "pip libraries"
+
+# ---- 3. /opt git clones (XSStrike, XXEinjector) ----------------------------
+log "Updating /opt git clones..."
+for repo in XSStrike XXEinjector; do
+    if [ -d "/opt/$repo" ]; then
+        OUT=$(git -C "/opt/$repo" pull --ff-only --quiet 2>&1)
+        echo "$OUT" | grep -q "Already up to date" && skip "$repo" || ok "$repo pulled"
+    else
+        warn "/opt/$repo not found — run setup.sh"
+    fi
+done
+# Re-run XSStrike deps in case requirements.txt changed
+[ -f /opt/XSStrike/requirements.txt ] && \
+    pip install --break-system-packages --quiet -r /opt/XSStrike/requirements.txt
+
+# ---- 4. GitHub release assets (version-checked) ----------------------------
+log "Checking GitHub release assets..."
+
+# RustScan
+if needs_update "rustscan" "bee-san/RustScan"; then
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' RETURN
+    ARCH=$(dpkg --print-architecture)
+    wget -q -O "$TMP/rustscan.deb.zip" \
+        "https://github.com/bee-san/RustScan/releases/latest/download/rustscan.deb.zip"
+    unzip -o "$TMP/rustscan.deb.zip" -d "$TMP/" >/dev/null
+    DEB=$(find "$TMP" -name "rustscan_*_${ARCH}.deb" -print -quit)
+    [ -z "$DEB" ] && DEB=$(find "$TMP" -name "rustscan_*.deb" -print -quit)
+    if [ -n "$DEB" ]; then
+        dpkg -i "$DEB" >/dev/null 2>&1 || apt-get install -f -y >/dev/null
+        set_ver "rustscan" "$LATEST_TAG"
+        ok "RustScan $LATEST_TAG"
+    fi
+    trap - RETURN; rm -rf "$TMP"
+fi
+
+# Ligolo-ng
+if needs_update "ligolo-ng" "nicocha30/ligolo-ng"; then
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' RETURN
+    BASE="https://github.com/nicocha30/ligolo-ng/releases/download/${LATEST_TAG}"
+    wget -q -O "$TMP/proxy.tar.gz"       "${BASE}/ligolo-ng_proxy_${LATEST_VER}_linux_amd64.tar.gz"
+    wget -q -O "$TMP/agent_linux.tar.gz" "${BASE}/ligolo-ng_agent_${LATEST_VER}_linux_amd64.tar.gz"
+    wget -q -O "$TMP/agent_win.zip"      "${BASE}/ligolo-ng_agent_${LATEST_VER}_windows_amd64.zip"
+    cd "$TMP"
+    tar -xzf proxy.tar.gz       && install -m 755 proxy     /opt/ligolo-ng/proxy
+    rm -f agent
+    tar -xzf agent_linux.tar.gz && install -m 755 agent     /opt/ligolo-ng/agents/linux/agent
+    unzip -o agent_win.zip >/dev/null
+    install -m 755 agent.exe /opt/ligolo-ng/agents/windows/agent.exe
+    cp /opt/ligolo-ng/agents/windows/agent.exe "$WIN_AD/agent.exe"   2>/dev/null || true
+    cp /opt/ligolo-ng/agents/windows/agent.exe "$WIN_EXES/agent.exe" 2>/dev/null || true
+    cp /opt/ligolo-ng/proxy                    "$WIN_AD/proxy"        2>/dev/null || true
+    cd - >/dev/null
+    trap - RETURN; rm -rf "$TMP"
+    set_ver "ligolo-ng" "$LATEST_TAG"
+    ok "Ligolo-ng $LATEST_TAG"
+fi
+
+# peass-ng (winpeas + linpeas)
+if needs_update "peass-ng" "peass-ng/PEASS-ng"; then
+    BASE="https://github.com/peass-ng/PEASS-ng/releases/download/${LATEST_TAG}"
+    force_fetch "$BASE/winPEASx64.exe" "$WIN_ROOT/winPEASx64.exe"
+    force_fetch "$BASE/linpeas.sh"     "$LIN_TOOLS/linpeas.sh"
+    chmod +x "$LIN_TOOLS/linpeas.sh" 2>/dev/null || true
+    set_ver "peass-ng" "$LATEST_TAG"
+fi
+
+# kerbrute
+if needs_update "kerbrute" "ropnop/kerbrute"; then
+    BASE="https://github.com/ropnop/kerbrute/releases/download/${LATEST_TAG}"
+    force_fetch "$BASE/kerbrute_linux_amd64"       "$WIN_AD/kerbrute_linux_amd64"
+    force_fetch "$BASE/kerbrute_darwin_amd64"      "$WIN_AD/kerbrute_darwin_amd64"
+    force_fetch "$BASE/kerbrute_windows_amd64.exe" "$WIN_AD/kerbrute_windows_amd64.exe"
+    chmod +x "$WIN_AD/kerbrute_linux_amd64" "$WIN_AD/kerbrute_darwin_amd64" 2>/dev/null || true
+    cp "$WIN_AD/kerbrute_linux_amd64"        "$WIN_ROOT/kerbrute"     2>/dev/null || true
+    cp "$WIN_AD/kerbrute_windows_amd64.exe"  "$WIN_ROOT/kerbrute.exe" 2>/dev/null || true
+    set_ver "kerbrute" "$LATEST_TAG"
+fi
+
+# windapsearch Go binaries
+if needs_update "windapsearch" "ropnop/go-windapsearch"; then
+    BASE="https://github.com/ropnop/go-windapsearch/releases/download/${LATEST_TAG}"
+    force_fetch "$BASE/windapsearch-linux-amd64"       "$WIN_AD/windapsearch-linux-amd64"
+    force_fetch "$BASE/windapsearch-darwin-amd64"      "$WIN_AD/windapsearch-darwin-amd64"
+    force_fetch "$BASE/windapsearch-windows-amd64.exe" "$WIN_AD/windapsearch-windows-amd64.exe"
+    chmod +x "$WIN_AD/windapsearch-linux-amd64" "$WIN_AD/windapsearch-darwin-amd64" 2>/dev/null || true
+    set_ver "windapsearch" "$LATEST_TAG"
+fi
+
+# SharpHound
+if needs_update "sharphound" "SpecterOps/SharpHound"; then
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' RETURN
+    wget -q -O "$TMP/sh.zip" \
+        "https://github.com/SpecterOps/SharpHound/releases/download/${LATEST_TAG}/sharphound-${LATEST_TAG}.zip"
+    unzip -o -j "$TMP/sh.zip" "SharpHound.exe" "SharpHound.ps1" -d "$WIN_AD/" >/dev/null 2>&1
+    cp "$WIN_AD/SharpHound.exe" "$WIN_ROOT/SharpHound.exe" 2>/dev/null || true
+    cp "$WIN_AD/SharpHound.ps1" "$WIN_ROOT/SharpHound.ps1" 2>/dev/null || true
+    trap - RETURN; rm -rf "$TMP"
+    set_ver "sharphound" "$LATEST_TAG"
+fi
+
+# Snaffler
+if needs_update "snaffler" "SnaffCon/Snaffler"; then
+    force_fetch \
+        "https://github.com/SnaffCon/Snaffler/releases/download/${LATEST_TAG}/Snaffler.exe" \
+        "$WIN_AD/Snaffler.exe"
+    set_ver "snaffler" "$LATEST_TAG"
+fi
+
+# mimikatz
+if needs_update "mimikatz" "gentilkiwi/mimikatz"; then
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' RETURN
+    wget -q -O "$TMP/mimi.zip" \
+        "https://github.com/gentilkiwi/mimikatz/releases/download/${LATEST_TAG}/mimikatz_trunk.zip"
+    unzip -o -j "$TMP/mimi.zip" "x64/mimikatz.exe" -d "$WIN_AD/" >/dev/null 2>&1
+    trap - RETURN; rm -rf "$TMP"
+    set_ver "mimikatz" "$LATEST_TAG"
+fi
+
+# pspy64
+if needs_update "pspy" "DominicBreuker/pspy"; then
+    force_fetch \
+        "https://github.com/DominicBreuker/pspy/releases/download/${LATEST_TAG}/pspy64" \
+        "$WIN_ROOT/pspy64"
+    chmod +x "$WIN_ROOT/pspy64" 2>/dev/null || true
+    set_ver "pspy" "$LATEST_TAG"
+fi
+
+# GodPotato
+if needs_update "godpotato" "BeichenDream/GodPotato"; then
+    for net in NET2 NET35 NET4; do
+        force_fetch \
+            "https://github.com/BeichenDream/GodPotato/releases/download/${LATEST_TAG}/GodPotato-${net}.exe" \
+            "$WIN_EXES/GodPotato/GodPotato-${net}.exe"
+    done
+    set_ver "godpotato" "$LATEST_TAG"
+fi
+
+# PrintSpoofer
+if needs_update "printspoofer" "itm4n/PrintSpoofer"; then
+    BASE="https://github.com/itm4n/PrintSpoofer/releases/download/${LATEST_TAG}"
+    force_fetch "$BASE/PrintSpoofer64.exe" "$WIN_EXES/PrintSpoofer64.exe"
+    force_fetch "$BASE/PrintSpoofer32.exe" "$WIN_EXES/printspoofer32.exe"
+    set_ver "printspoofer" "$LATEST_TAG"
+fi
+
+# JuicyPotato
+if needs_update "juicypotato" "ohpe/juicy-potato"; then
+    force_fetch \
+        "https://github.com/ohpe/juicy-potato/releases/download/${LATEST_TAG}/JuicyPotato.exe" \
+        "$WIN_EXES/JuicyPotato.exe"
+    set_ver "juicypotato" "$LATEST_TAG"
+fi
+
+# aquatone
+if needs_update "aquatone" "michenriksen/aquatone"; then
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' RETURN
+    wget -q -O "$TMP/aq.zip" \
+        "https://github.com/michenriksen/aquatone/releases/download/${LATEST_TAG}/aquatone_linux_amd64_${LATEST_VER}.zip"
+    unzip -o -j "$TMP/aq.zip" "aquatone" -d "$WIN_AD/" >/dev/null 2>&1
+    chmod +x "$WIN_AD/aquatone" 2>/dev/null || true
+    trap - RETURN; rm -rf "$TMP"
+    set_ver "aquatone" "$LATEST_TAG"
+fi
+
+# azurehound
+if needs_update "azurehound" "SpecterOps/AzureHound"; then
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' RETURN
+    wget -q -O "$TMP/az.zip" \
+        "https://github.com/SpecterOps/AzureHound/releases/download/${LATEST_TAG}/AzureHound_${LATEST_TAG}_linux_amd64.zip"
+    unzip -o -j "$TMP/az.zip" "azurehound" -d "$WIN_AD/" >/dev/null 2>&1
+    chmod +x "$WIN_AD/azurehound" 2>/dev/null || true
+    trap - RETURN; rm -rf "$TMP"
+    set_ver "azurehound" "$LATEST_TAG"
+fi
+
+# KvcForensic — release tag is the literal string "latest" (no version to diff)
+# Always re-download; 7z extract overwrites in place.
+log "Refreshing KvcForensic (Linux)..."
+TMP=$(mktemp -d)
+if wget -q -O "$TMP/KvcForensic_Linux.7z" \
+    "https://github.com/wesmar/KvcForensic/releases/download/latest/KvcForensic_Linux.7z"; then
+    7z x -y -p"github.com" "$TMP/KvcForensic_Linux.7z" -o"$LIN_TOOLS/KvcForensic" >/dev/null 2>&1 \
+        && chmod +x "$LIN_TOOLS/KvcForensic/KvcForensic" \
+                    "$LIN_TOOLS/KvcForensic/KvcForensic_static" 2>/dev/null \
+        && ok "KvcForensic refreshed" \
+        || warn "KvcForensic extract failed"
+fi
+rm -rf "$TMP"
+
+# ---- 5. Raw GitHub files (always re-fetch — tracks master/main branch) ------
+log "Refreshing raw GitHub files..."
+
+# PowerShell scripts (PowerSploit / Empire / standalone repos)
+PS_BASE="https://raw.githubusercontent.com/PowerShellMafia/PowerSploit/master"
+force_fetch "$PS_BASE/Recon/PowerView.ps1"  "$WIN_AD/PowerView.ps1"
+force_fetch "$PS_BASE/Privesc/PowerUp.ps1"  "$WIN_AD/PowerUp.ps1"
+cp "$WIN_AD/PowerUp.ps1" "$WIN_EXES/PowerUp.ps1" 2>/dev/null || true
+
+force_fetch "https://raw.githubusercontent.com/EmpireProject/Empire/master/data/module_source/credentials/Invoke-Kerberoast.ps1" "$WIN_AD/Invoke-Kerberoast.ps1"
+force_fetch "https://raw.githubusercontent.com/61106960/adPEAS/main/adPEAS.ps1"                              "$WIN_AD/adPEAS.ps1"
+force_fetch "https://raw.githubusercontent.com/dafthack/DomainPasswordSpray/master/DomainPasswordSpray.ps1" "$WIN_AD/DomainPasswordSpray.ps1"
+force_fetch "https://raw.githubusercontent.com/Kevin-Robertson/Powermad/master/Powermad.ps1"                "$WIN_AD/Powermad.ps1"
+force_fetch "https://raw.githubusercontent.com/NetSPI/PowerUpSQL/master/PowerUpSQL.ps1"                     "$WIN_AD/PowerUpSQL.ps1"
+force_fetch "https://raw.githubusercontent.com/antonioCoco/RunasCs/master/Invoke-RunasCs.ps1"               "$WIN_AD/Invoke-RunasCs.ps1"
+force_fetch "https://raw.githubusercontent.com/ropnop/windapsearch/master/windapsearch.py"                  "$WIN_AD/windapsearch.py"
+chmod +x "$WIN_AD/windapsearch.py" 2>/dev/null || true
+
+# SharpCollection — raw master branch, always latest Flangvik build
+SC="https://raw.githubusercontent.com/Flangvik/SharpCollection/master/NetFramework_4.7_x64"
+for tool in Rubeus.exe Certify.exe SharpUp.exe SharpGPOAbuse.exe \
+            SharpSCCM.exe SharpShares.exe KrbRelayUp.exe GMSAPasswordReader.exe; do
+    force_fetch "$SC/$tool" "$WIN_AD/$tool"
+done
+
+# SpoolSample (jakobfriedl precompiled — master branch)
+force_fetch \
+    "https://github.com/jakobfriedl/precompiled-binaries/raw/main/LateralMovement/SpoolSample.exe" \
+    "$WIN_AD/SpoolSample.exe"
+
+# Linux enum scripts
+force_fetch "https://raw.githubusercontent.com/diego-treitos/linux-smart-enumeration/master/lse.sh"       "$LIN_TOOLS/lse.sh"
+force_fetch "https://raw.githubusercontent.com/pentestmonkey/unix-privesc-check/1_x/unix-privesc-check"  "$LIN_TOOLS/unix-privesc-check"
+force_fetch "https://raw.githubusercontent.com/xct/hashgrab/main/hashgrab.py"                             "$LIN_TOOLS/hashgrab.py"
+chmod +x "$LIN_TOOLS/lse.sh" "$LIN_TOOLS/unix-privesc-check" "$LIN_TOOLS/hashgrab.py" 2>/dev/null || true
+
+# ---- 6. CyberChef -----------------------------------------------------------
+log "Checking CyberChef..."
+CC_LATEST=$(curl -sLI -o /dev/null -w '%{url_effective}' \
+    https://github.com/gchq/CyberChef/releases/latest \
+    | sed -E 's|.*/tag/||; s|/$||')
+CC_LATEST_VER="${CC_LATEST#v}"
+
+if [ -L /opt/CyberChef/CyberChef.html ]; then
+    CC_INSTALLED=$(basename "$(readlink /opt/CyberChef/CyberChef.html)" \
+        | sed 's/CyberChef_v//; s/\.html//')
+else
+    CC_INSTALLED="none"
+fi
+
+if [ "$CC_LATEST_VER" = "$CC_INSTALLED" ]; then
+    ok "CyberChef v${CC_LATEST_VER}"
+else
+    upd "CyberChef ${CC_INSTALLED} → ${CC_LATEST_VER}"
+    CC_ZIP="CyberChef_v${CC_LATEST_VER}.zip"
+    CC_HTML="CyberChef_v${CC_LATEST_VER}.html"
+    wget -q -O "/tmp/${CC_ZIP}" \
+        "https://github.com/gchq/CyberChef/releases/download/${CC_LATEST}/${CC_ZIP}"
+    unzip -o -j "/tmp/${CC_ZIP}" "$CC_HTML" -d /opt/CyberChef/ >/dev/null
+    ln -sf "/opt/CyberChef/${CC_HTML}" /opt/CyberChef/CyberChef.html
+    find /opt/CyberChef/ -name 'CyberChef_v*.html' ! -name "$CC_HTML" -delete 2>/dev/null || true
+    rm -f "/tmp/${CC_ZIP}"
+    ok "CyberChef updated to v${CC_LATEST_VER}"
+fi
+
+# ---- 7. HackTricks (git pull + Docker restart if changed) -------------------
+log "Updating HackTricks..."
+
+update_hacktricks() {
+    local repo="$1" container="$2" port="$3"
+    if [ ! -d "$repo" ]; then
+        warn "$repo not found — run setup.sh first"; return
+    fi
+    PULL=$(git -C "$repo" pull --ff-only 2>&1)
+    if echo "$PULL" | grep -q "Already up to date"; then
+        ok "$repo is current"
+    else
+        ok "$repo updated"
+        if docker inspect "$container" >/dev/null 2>&1; then
+            docker restart "$container" >/dev/null \
+                && ok "$container restarted (http://localhost:${port})" \
+                || warn "Failed to restart $container"
+        else
+            warn "$container container not found — run setup.sh to create it"
+        fi
+    fi
+}
+
+update_hacktricks /opt/hacktricks       hacktricks       3337
+update_hacktricks /opt/hacktricks-cloud hacktricks-cloud 3338
+
+log "update-toolkit complete."
+UPDATE_SCRIPT
+
+$SUDO chmod +x /usr/local/bin/update-toolkit
+
+# Systemd service unit
+$SUDO tee /etc/systemd/system/update-toolkit.service > /dev/null << 'SERVICE'
+[Unit]
+Description=Update CyberChef and HackTricks
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/update-toolkit
+StandardOutput=journal
+StandardError=journal
+# Don't fail the timer if a transient network error occurs
+SuccessExitStatus=0 1
+SERVICE
+
+# Systemd timer unit — runs weekly, Persistent=true means it catches up if the
+# machine was off when the timer was due (e.g. VM not running on Sunday night)
+$SUDO tee /etc/systemd/system/update-toolkit.timer > /dev/null << 'TIMER'
+[Unit]
+Description=Weekly update for CyberChef and HackTricks
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target
+TIMER
+
+# Enable and start the timer
+$SUDO systemctl daemon-reload
+$SUDO systemctl enable --now update-toolkit.timer 2>/dev/null \
+    && log "update-toolkit timer enabled (weekly, persistent)" \
+    || warn "Could not enable systemd timer (non-systemd env?)"
+
+# ---- CyberChef (offline single-file) ----------------------------------------
+# GCHQ publishes a fully self-contained .html per release. No web server needed
+# — open with: xdg-open /opt/CyberChef/CyberChef.html
+log "Installing CyberChef (offline)..."
+CC_TAG=$(gh_latest_tag "gchq/CyberChef")
+if [ -n "$CC_TAG" ]; then
+    CC_VER="${CC_TAG#v}"
+    CC_ZIP="CyberChef_v${CC_VER}.zip"
+    CC_HTML="CyberChef_v${CC_VER}.html"
+    if [ ! -f /opt/CyberChef/CyberChef.html ]; then
+        $SUDO mkdir -p /opt/CyberChef
+        wget -q --show-progress -O "/tmp/${CC_ZIP}" \
+            "https://github.com/gchq/CyberChef/releases/download/${CC_TAG}/${CC_ZIP}" \
+            && $SUDO unzip -o -j "/tmp/${CC_ZIP}" "$CC_HTML" -d /opt/CyberChef/ >/dev/null \
+            && $SUDO ln -sf "/opt/CyberChef/${CC_HTML}" /opt/CyberChef/CyberChef.html \
+            && rm -f "/tmp/${CC_ZIP}" \
+            || warn "CyberChef download/extract failed"
+    else
+        echo "    [skip] CyberChef already installed"
+    fi
+else
+    warn "Could not resolve CyberChef latest tag; skipping."
+fi
+
+# ---- HackTricks (full build, persistent Docker) -----------------------------
+# Both books are served via the official translator-image (which includes mdbook
+# + all HackTricks preprocessors). Containers use --restart unless-stopped so
+# they survive reboots automatically once Docker starts.
+#
+# Ports:
+#   http://localhost:3337 — HackTricks (main)
+#   http://localhost:3338 — HackTricks Cloud
+#
+# Re-running this script:
+#   - git pull on both repos (picks up new content)
+#   - docker restart on both containers (reloads updated volume content)
+#
+HT_IMAGE="ghcr.io/hacktricks-wiki/hacktricks-cloud/translator-image"
+
+log "Setting up HackTricks (full build, persistent)..."
+
+# Clone / update content repos
+if [ ! -d /opt/hacktricks ]; then
+    $SUDO git clone --depth 1 https://github.com/HackTricks-wiki/hacktricks /opt/hacktricks \
+        || warn "HackTricks clone failed"
+else
+    $SUDO git -C /opt/hacktricks pull --ff-only >/dev/null 2>&1 \
+        && echo "    [updated] /opt/hacktricks" \
+        || warn "/opt/hacktricks pull failed (continuing)"
+fi
+
+if [ ! -d /opt/hacktricks-cloud ]; then
+    $SUDO git clone --depth 1 https://github.com/HackTricks-wiki/hacktricks-cloud /opt/hacktricks-cloud \
+        || warn "HackTricks Cloud clone failed"
+else
+    $SUDO git -C /opt/hacktricks-cloud pull --ff-only >/dev/null 2>&1 \
+        && echo "    [updated] /opt/hacktricks-cloud" \
+        || warn "/opt/hacktricks-cloud pull failed (continuing)"
+fi
+
+# Pull the Docker image once (translator-image includes mdbook + preprocessors)
+log "Pulling HackTricks Docker image (first run takes a few minutes)..."
+$SUDO docker pull "$HT_IMAGE" || warn "Docker image pull failed — containers may not start"
+
+# Helper: launch or restart a HackTricks container
+# Usage: hacktricks_container <name> <host_port> <volume_path>
+hacktricks_container() {
+    local name="$1" port="$2" vol="$3"
+    if $SUDO docker inspect "$name" >/dev/null 2>&1; then
+        # Container exists — restart so it picks up updated volume content
+        $SUDO docker restart "$name" >/dev/null \
+            && echo "    [restarted] $name at http://localhost:${port}" \
+            || warn "  Failed to restart $name"
+    else
+        $SUDO docker run -d \
+            --name "$name" \
+            --restart unless-stopped \
+            --platform linux/amd64 \
+            -p "${port}:3000" \
+            -v "${vol}:/app" \
+            "$HT_IMAGE" \
+            bash -c "cd /app \
+                && git config --global --add safe.directory /app \
+                && MDBOOK_PREPROCESSOR__HACKTRICKS__ENV=dev mdbook serve --hostname 0.0.0.0" \
+            && echo "    [started]  $name at http://localhost:${port} (building — allow ~5 min)" \
+            || warn "  Failed to start $name"
+    fi
+}
+
+hacktricks_container hacktricks       3337 /opt/hacktricks
+hacktricks_container hacktricks-cloud 3338 /opt/hacktricks-cloud
+
 # ---- Toolkit (Windows + Linux pentest tools) --------------------------------
 # Stages binaries/scripts under ~/Toolkit so they're ready to serve to targets
 # (HTTP server, SMB share, whatever). Idempotent: existing files are skipped.
@@ -223,6 +756,11 @@ WIN_EXES="$TOOLKIT/Windows/EXEs"
 LIN_TOOLS="$TOOLKIT/LinuxTools"
 
 mkdir -p "$WIN_AD" "$WIN_EXES/GodPotato" "$WIN_EXES/Procmon" "$LIN_TOOLS"
+
+# Write config so update-toolkit can find the toolkit path when run as root
+$SUDO tee /opt/.toolkit-config > /dev/null << TKCFG
+TOOLKIT_PATH=$TOOLKIT
+TKCFG
 
 # Relax strict mode for this section — individual download failures are OK
 set +e
@@ -605,6 +1143,40 @@ cat <<'TODO'
 
 TODO
 
+# ---- Seed toolkit version state file ----------------------------------------
+# Populate /opt/.toolkit-versions with current installed versions so
+# update-toolkit doesn't re-download every GitHub release asset on its first run.
+VERSIONS_FILE="/opt/.toolkit-versions"
+$SUDO touch "$VERSIONS_FILE"
+
+seed_ver() {
+    # seed_ver <key> <owner/repo> — resolve latest tag and store it
+    local key="$1" repo="$2" tag
+    tag=$(gh_latest_tag "$repo")
+    [ -z "$tag" ] && return
+    if $SUDO grep -q "^${key}=" "$VERSIONS_FILE" 2>/dev/null; then
+        $SUDO sed -i "s|^${key}=.*|${key}=${tag}|" "$VERSIONS_FILE"
+    else
+        echo "${key}=${tag}" | $SUDO tee -a "$VERSIONS_FILE" > /dev/null
+    fi
+}
+
+log "Seeding toolkit version state (prevents re-downloads on first update run)..."
+seed_ver "rustscan"     "bee-san/RustScan"
+seed_ver "ligolo-ng"    "nicocha30/ligolo-ng"
+seed_ver "peass-ng"     "peass-ng/PEASS-ng"
+seed_ver "kerbrute"     "ropnop/kerbrute"
+seed_ver "windapsearch" "ropnop/go-windapsearch"
+seed_ver "sharphound"   "SpecterOps/SharpHound"
+seed_ver "snaffler"     "SnaffCon/Snaffler"
+seed_ver "mimikatz"     "gentilkiwi/mimikatz"
+seed_ver "pspy"         "DominicBreuker/pspy"
+seed_ver "godpotato"    "BeichenDream/GodPotato"
+seed_ver "printspoofer" "itm4n/PrintSpoofer"
+seed_ver "juicypotato"  "ohpe/juicy-potato"
+seed_ver "aquatone"     "michenriksen/aquatone"
+seed_ver "azurehound"   "SpecterOps/AzureHound"
+
 # Re-enable strict mode for the rest of the script
 set -e
 
@@ -627,6 +1199,21 @@ cat <<EOF
       - $WIN_AD/agent.exe
       - $WIN_EXES/agent.exe
       - $WIN_AD/proxy
+
+    CyberChef (offline):
+      - xdg-open /opt/CyberChef/CyberChef.html
+
+    HackTricks (persistent Docker):
+      - Main book:  http://localhost:3337  (building ~5 min on first boot)
+      - Cloud book: http://localhost:3338
+      - Containers restart automatically on reboot (--restart unless-stopped)
+      - To stop:    sudo docker stop hacktricks hacktricks-cloud
+      - To check:   sudo docker ps | grep hacktricks
+
+    Updates (CyberChef + HackTricks):
+      - Auto:       weekly systemd timer (sudo systemctl status update-toolkit.timer)
+      - Manual:     sudo update-toolkit
+      - Next run:   sudo systemctl list-timers update-toolkit.timer
 
     Toolkit staged at $TOOLKIT:
       - Windows/{AD,EXEs}, top-level Windows, LinuxTools
