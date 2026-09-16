@@ -35,6 +35,7 @@ Tools are marked per **OffSec's OSCP+ Exam Guide** (not my own judgement). OffSe
 |---|---|---|
 | `gedit` | ✅ | GUI text editor |
 | `sublime-text` | ✅ | Code / notes editor |
+| `libreoffice` | ✅ | Office suite (open client docs, loot, and report writing) |
 | `seclists` | ✅ | Wordlists |
 | `gobuster` | ✅ | Directory / DNS / vhost fuzzer |
 | `feroxbuster` | ✅ | Recursive content discovery (Rust) |
@@ -42,6 +43,7 @@ Tools are marked per **OffSec's OSCP+ Exam Guide** (not my own judgement). OffSe
 | `sstimap` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for SSTI |
 | `chisel-common-binaries` | ✅ | Prebuilt chisel binaries |
 | `golang-go` | ✅ | Go toolchain |
+| `docker.io` | ✅ | Docker engine (runs HackTricks persistent containers) |
 | `pipx` | ✅ | Isolated Python app installer |
 | `unzip`, `p7zip-full` | ✅ | Archive extraction |
 | `wget`, `curl` | ✅ | HTTP downloaders |
@@ -94,6 +96,9 @@ Note on `gopherus`: it doesn't auto-exploit — it generates payload strings you
 | `/opt/ligolo-ng/proxy` | ✅ | Tunneling proxy (symlinked to `/usr/local/bin/ligolo-proxy`) |
 | `/opt/ligolo-ng/agents/linux/agent` | ✅ | Ligolo Linux agent |
 | `/opt/ligolo-ng/agents/windows/agent.exe` | ✅ | Ligolo Windows agent |
+| `/opt/CyberChef/CyberChef.html` | ✅ | Offline CyberChef — `xdg-open /opt/CyberChef/CyberChef.html` |
+| `/opt/hacktricks/` | ✅ | HackTricks source — served at `http://localhost:3337` via Docker |
+| `/opt/hacktricks-cloud/` | ✅ | HackTricks Cloud source — served at `http://localhost:3338` via Docker |
 | `/opt/XSStrike/` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for XSS |
 | `/opt/XXEinjector/` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for XXE |
 
@@ -104,6 +109,7 @@ Note on `gopherus`: it doesn't auto-exploit — it generates payload strings you
 | `ligolo-proxy` | ✅ | Symlink → `/opt/ligolo-ng/proxy` |
 | `xsstrike` | 🚫 | Shim → `python3 /opt/XSStrike/xsstrike.py` |
 | `xxeinjector` | 🚫 | Shim → `ruby /opt/XXEinjector/XXEinjector.rb` |
+| `update-toolkit` | ✅ | Updates CyberChef + HackTricks (also runs weekly via systemd timer) |
 
 ### Other
 
@@ -272,6 +278,7 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `ntpdate` | ✅ | Sync clock before Kerberos ops | apt |
 | `rustscan` | ✅ | Fast port scanning | GitHub `.deb` |
 | `ligolo-proxy` | ✅ | Reverse tunneling | `/opt/ligolo-ng/` |
+| `update-toolkit` | ✅ | Update CyberChef + HackTricks | `/usr/local/bin/` |
 | `7z` | ✅ | Archive extraction | apt |
 
 ---
