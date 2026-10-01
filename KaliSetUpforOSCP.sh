@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# Pentest box setup script
+# KaliSetUpforOSCP.sh
+# https://github.com/Porkballs/CTFnOSCP/blob/main/KaliSetUpforOSCP.sh
 #
 
 set -euo pipefail
@@ -56,6 +57,7 @@ $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
     gedit \
     sublime-text \
     libreoffice \
+    flameshot \
     seclists \
     gobuster \
     feroxbuster \
@@ -176,6 +178,26 @@ else
     warn "Could not download RustScan zip; skipping."
 fi
 
+# ---- Obsidian (note-taking, GitHub release .deb) ----------------------------
+log "Installing Obsidian..."
+OBS_TAG=$(gh_latest_tag "obsidianmd/obsidian-releases")
+if [ -n "$OBS_TAG" ]; then
+    OBS_VER="${OBS_TAG#v}"
+    OBS_DEB="obsidian_${OBS_VER}_amd64.deb"
+    OBS_URL="https://github.com/obsidianmd/obsidian-releases/releases/download/${OBS_TAG}/${OBS_DEB}"
+    OBS_TMP=$(mktemp -d)
+    if wget -q --show-progress -O "$OBS_TMP/${OBS_DEB}" "$OBS_URL"; then
+        $SUDO dpkg -i "$OBS_TMP/${OBS_DEB}" 2>/dev/null \
+            || $SUDO apt-get install -f -y >/dev/null
+        echo "    [ok] Obsidian ${OBS_VER} installed"
+    else
+        warn "Obsidian download failed"
+    fi
+    rm -rf "$OBS_TMP"
+else
+    warn "Could not resolve Obsidian latest tag; skipping."
+fi
+
 # ---- Ligolo-ng (latest release) ---------------------------------------------
 # Asset names embed the version (e.g. ligolo-ng_agent_0.8.3_linux_amd64.tar.gz),
 # so resolve the latest tag via curl -I on the /releases/latest redirect.
@@ -268,7 +290,7 @@ CONFIG_FILE="/opt/.toolkit-config"
 VERSIONS_FILE="/opt/.toolkit-versions"
 
 if [ ! -f "$CONFIG_FILE" ]; then
-    warn "$CONFIG_FILE not found — run setup.sh first."; exit 1
+    warn "$CONFIG_FILE not found — run KaliSetUpforOSCP.sh first."; exit 1
 fi
 # shellcheck disable=SC1090
 source "$CONFIG_FILE"
@@ -347,7 +369,7 @@ for repo in XSStrike XXEinjector; do
         OUT=$(git -C "/opt/$repo" pull --ff-only --quiet 2>&1)
         echo "$OUT" | grep -q "Already up to date" && skip "$repo" || ok "$repo pulled"
     else
-        warn "/opt/$repo not found — run setup.sh"
+        warn "/opt/$repo not found — run KaliSetUpforOSCP.sh"
     fi
 done
 # Re-run XSStrike deps in case requirements.txt changed
@@ -370,6 +392,22 @@ if needs_update "rustscan" "bee-san/RustScan"; then
         dpkg -i "$DEB" >/dev/null 2>&1 || apt-get install -f -y >/dev/null
         set_ver "rustscan" "$LATEST_TAG"
         ok "RustScan $LATEST_TAG"
+    fi
+    trap - RETURN; rm -rf "$TMP"
+fi
+
+# Obsidian
+if needs_update "obsidian" "obsidianmd/obsidian-releases"; then
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' RETURN
+    OBS_DEB="obsidian_${LATEST_VER}_amd64.deb"
+    wget -q -O "$TMP/${OBS_DEB}" \
+        "https://github.com/obsidianmd/obsidian-releases/releases/download/${LATEST_TAG}/${OBS_DEB}"
+    if [ -f "$TMP/${OBS_DEB}" ]; then
+        dpkg -i "$TMP/${OBS_DEB}" >/dev/null 2>&1 || apt-get install -f -y >/dev/null
+        set_ver "obsidian" "$LATEST_TAG"
+        ok "Obsidian $LATEST_TAG"
+    else
+        warn "Obsidian download failed"
     fi
     trap - RETURN; rm -rf "$TMP"
 fi
@@ -602,7 +640,7 @@ log "Updating HackTricks..."
 update_hacktricks() {
     local repo="$1" container="$2" port="$3"
     if [ ! -d "$repo" ]; then
-        warn "$repo not found — run setup.sh first"; return
+        warn "$repo not found — run KaliSetUpforOSCP.sh first"; return
     fi
     PULL=$(git -C "$repo" pull --ff-only 2>&1)
     if echo "$PULL" | grep -q "Already up to date"; then
@@ -614,7 +652,7 @@ update_hacktricks() {
                 && ok "$container restarted (http://localhost:${port})" \
                 || warn "Failed to restart $container"
         else
-            warn "$container container not found — run setup.sh to create it"
+            warn "$container container not found — run KaliSetUpforOSCP.sh to create it"
         fi
     fi
 }
@@ -1278,6 +1316,7 @@ seed_ver "printspoofer" "itm4n/PrintSpoofer"
 seed_ver "juicypotato"  "ohpe/juicy-potato"
 seed_ver "aquatone"     "michenriksen/aquatone"
 seed_ver "azurehound"   "SpecterOps/AzureHound"
+seed_ver "obsidian"     "obsidianmd/obsidian-releases"
 
 # Re-enable strict mode for the rest of the script
 set -e
