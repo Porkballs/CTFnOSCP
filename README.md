@@ -4,7 +4,7 @@
 
 # Kali Setup — Apps & Programs Inventory
 
-Everything the `setup.sh` script installs, stages, or configures on a fresh Kali VM.
+Everything [`KaliSetUpforOSCP.sh`](https://github.com/Porkballs/CTFnOSCP/blob/main/KaliSetUpforOSCP.sh) installs, stages, or configures on a fresh Kali VM.
 
 ---
 
@@ -36,6 +36,7 @@ Tools are marked per **OffSec's OSCP+ Exam Guide** (not my own judgement). OffSe
 | `gedit` | ✅ | GUI text editor |
 | `sublime-text` | ✅ | Code / notes editor |
 | `libreoffice` | ✅ | Office suite (open client docs, loot, and report writing) |
+| `flameshot` | ✅ | Screenshot tool with annotation (markup, arrows, blur, copy to clipboard) |
 | `seclists` | ✅ | Wordlists |
 | `gobuster` | ✅ | Directory / DNS / vhost fuzzer |
 | `feroxbuster` | ✅ | Recursive content discovery (Rust) |
@@ -115,9 +116,53 @@ Note on `gopherus3`: it doesn't auto-exploit — it generates payload strings yo
 
 | Item | OSCP+ | Location |
 |---|---|---|
-| RustScan | ✅ | apt (from GitHub `.deb`) — port scanner |
+| RustScan | ✅ | GitHub `.deb` — port scanner |
+| Obsidian | ✅ | GitHub `.deb` — note-taking / vault |
 | Powerline fonts | ✅ | User-level install |
 | `rockyou.txt` extracted | ✅ | `/usr/share/wordlists/rockyou.txt` |
+
+---
+
+## 4a. Note-Taking Tools
+
+Tools for documenting findings, annotating screenshots, and writing reports during engagements.
+
+| Tool | OSCP+ | Install | Purpose |
+|---|---|---|---|
+| **Obsidian** | ✅ | GitHub `.deb` (auto-updated via `update-toolkit`) | Primary note vault — Markdown-based, local, works offline. Use for structured engagement notes, methodology checklists, and loot storage |
+| **flameshot** | ✅ | apt | Screenshot + annotation — arrows, boxes, text, blur, copy-to-clipboard. Primary tool for evidence capture during reporting |
+| **Sublime Text** | ✅ | apt (repo) | Fast file/code editor. Good for editing payloads, scripts, and quick notes |
+| **LibreOffice** | ✅ | apt | Open `.docx`/`.xlsx` loot from shares; write formal reports if not using SysReptor |
+| **gedit** | ✅ | apt | Lightweight GUI editor for quick edits |
+
+### Flameshot quick-reference
+
+```bash
+# GUI capture with annotation toolbar
+flameshot gui
+
+# Fullscreen capture direct to clipboard
+flameshot full --clipboard
+
+# Capture and save to file
+flameshot gui --path ~/Screenshots/
+
+# Bind to PrintScreen in your desktop settings for instant access
+```
+
+### Obsidian vault layout suggestion for engagements
+
+```
+Vault/
+├── 00-Templates/          # recon, nmap, finding templates
+├── 01-Active/
+│   └── <engagement>/
+│       ├── Recon/         # nmap, enum notes
+│       ├── Foothold/      # initial access steps
+│       ├── PrivEsc/       # privesc notes + evidence
+│       └── Loot/          # credentials, hashes, flags
+└── 02-Reference/          # methodology, cheat sheets, payloads
+```
 
 ### Persistent Docker services
 
@@ -154,7 +199,7 @@ Policy files: `/usr/lib/firefox-esr/distribution/policies.json` and `/etc/firefo
 | apt tools | `sudo apt update && sudo apt upgrade` |
 | Everything else | `sudo update-toolkit` (also runs weekly via `update-toolkit.timer`) |
 
-`update-toolkit` covers: pipx tools, pip libraries, /opt git clones (XSStrike, XXEinjector), all GitHub release binaries, raw GitHub scripts, CyberChef (docker pull), and HackTricks (git pull + container restart).
+`update-toolkit` covers: pipx tools, pip libraries, /opt git clones (XSStrike, XXEinjector), all GitHub release binaries (including Obsidian and RustScan), raw GitHub scripts, CyberChef (docker pull), and HackTricks (git pull + container restart).
 
 ---
 
@@ -290,7 +335,7 @@ All ✅ for OSCP+ (utility scripts, editors, legacy tools).
 - ⚠️ **No spoofing** — IP, ARP, DNS, NBNS, etc.
 
 **All the ⚡ tools I originally flagged are actually ✅ ALLOWED on OSCP+:**
-mimikatz, Rubeus, kerbrute, netexec, all Sharp* tools, all Potato exploits, PrintSpoofer, SpoolSample, Snaffler, gopherus (payload gen only), hashgrab, KvcForensic, DomainPasswordSpray, Invoke-Kerberoast, etc.
+mimikatz, Rubeus, kerbrute, netexec, all Sharp* tools, all Potato exploits, PrintSpoofer, SpoolSample, Snaffler, gopherus3 (payload gen only), hashgrab, KvcForensic, DomainPasswordSpray, Invoke-Kerberoast, etc.
 
 The OSCP+ line isn't "does it automate anything?" — it's "does it automate the vulnerability discovery → exploitation chain like SQLmap does?" Almost none of the AD/privesc tools do that. They're targeted single-purpose exploits or enumeration, both of which OffSec explicitly permits.
 
@@ -307,7 +352,7 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `sstimap` | 🚫 | SSTI → RCE | apt |
 | `xsstrike` | 🚫 | XSS | wrapper |
 | `xxeinjector` | 🚫 | XXE | wrapper |
-| `gopherus` | ✅ | SSRF payloads | pipx |
+| `gopherus3` | ✅ | SSRF payloads | pipx |
 | `ldapsearch-ad.py` | ✅ | AD LDAP enum | pipx |
 | `ldeep` | ✅ | In-depth AD LDAP enum (LAPS, silos, SCCM, etc.) | pipx |
 | `bloodyAD` | ✅ | AD write-side abuse (WriteOwner/DACL, RBCD, DCsync, shadow creds) | pipx |
@@ -315,9 +360,9 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `ntpdate` | ✅ | Sync clock before Kerberos ops | apt (`ntpsec-ntpdate`) |
 | `rustscan` | ✅ | Fast port scanning | GitHub `.deb` |
 | `ligolo-proxy` | ✅ | Reverse tunneling | `/opt/ligolo-ng/` |
-| `update-toolkit` | ✅ | Update CyberChef + HackTricks | `/usr/local/bin/` |
+| `update-toolkit` | ✅ | Update all non-apt tools (CyberChef, HackTricks, binaries, pipx) | `/usr/local/bin/` |
 | `7z` | ✅ | Archive extraction | apt |
 
 ---
 
-*Classifications derived from the OSCP+ Exam Guide (help.offsec.com) and OSCP+ Exam FAQ. Regenerate this file after modifying `KaliSetUpforOSCP.sh`.*
+*Classifications derived from the OSCP+ Exam Guide (help.offsec.com) and OSCP+ Exam FAQ. Regenerate this file after modifying [`KaliSetUpforOSCP.sh`](https://github.com/Porkballs/CTFnOSCP/blob/main/KaliSetUpforOSCP.sh).*
