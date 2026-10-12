@@ -41,6 +41,7 @@ Tools are marked per **OffSec's OSCP+ Exam Guide** (not my own judgement). OffSe
 | `gobuster` | ✅ | Directory / DNS / vhost fuzzer |
 | `feroxbuster` | ✅ | Recursive content discovery (Rust) |
 | `netexec` | ✅ | **On OffSec allowed list** (as CrackMapExec/NetExec) |
+| `eyewitness` | ✅ | Screenshots + headers + default-cred ID for web/RDP/VNC — visual recon |
 | `sstimap` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for SSTI |
 | `chisel-common-binaries` | ✅ | Prebuilt chisel binaries |
 | `golang-go` | ✅ | Go toolchain |
@@ -248,7 +249,7 @@ Policy files: `/usr/lib/firefox-esr/distribution/policies.json` and `/etc/firefo
 | `PsExec64.exe` | ✅ | Remote exec (Sysinternals) |
 | `procdump64.exe` | ✅ | Process dump (Sysinternals) |
 | `ADExplorer64.exe` | ✅ | AD inspection (Sysinternals) |
-| `aquatone` | ✅ | Visual recon |
+| `aquatone` | ✅ | Visual recon — also symlinked to `/usr/local/bin/aquatone` so it's usable directly on Kali |
 | `azurehound` | ✅ | Azure attack-path collector (analogous to BloodHound) |
 | `nc64.exe` | ✅ | Netcat |
 | `agent.exe`, `proxy` | ✅ | Ligolo binaries |
@@ -349,6 +350,8 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `feroxbuster`, `gobuster` | ✅ | Content discovery | apt |
 | `wenum` | ✅ | Parameter fuzzing | pipx |
 | `netexec` (`nxc`) | ✅ | SMB/WinRM/LDAP/MSSQL | apt |
+| `eyewitness` | ✅ | Screenshot + header + default-cred recon | apt |
+| `aquatone` | ✅ | Screenshot/visual recon across hosts | GitHub release, `/usr/local/bin/` |
 | `sstimap` | 🚫 | SSTI → RCE | apt |
 | `xsstrike` | 🚫 | XSS | wrapper |
 | `xxeinjector` | 🚫 | XXE | wrapper |

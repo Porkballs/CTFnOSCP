@@ -62,6 +62,7 @@ $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
     gobuster \
     feroxbuster \
     netexec \
+    eyewitness \
     sstimap \
     chisel-common-binaries \
     golang-go \
@@ -550,6 +551,7 @@ if needs_update "aquatone" "michenriksen/aquatone"; then
         "https://github.com/michenriksen/aquatone/releases/download/${LATEST_TAG}/aquatone_linux_amd64_${LATEST_VER}.zip"
     unzip -o -j "$TMP/aq.zip" "aquatone" -d "$WIN_AD/" >/dev/null 2>&1
     chmod +x "$WIN_AD/aquatone" 2>/dev/null || true
+    ln -sf "$WIN_AD/aquatone" /usr/local/bin/aquatone
     trap - RETURN; rm -rf "$TMP"
     set_ver "aquatone" "$LATEST_TAG"
 fi
@@ -1149,6 +1151,8 @@ if [ -n "$TAG" ]; then
         unzip -o -j "$WIN_AD/aquatone.zip" "aquatone" -d "$WIN_AD/" >/dev/null 2>&1
         chmod +x "$WIN_AD/aquatone" 2>/dev/null
     fi
+    # Also put it on PATH so it's usable directly on Kali, not just staged for targets
+    [ -f "$WIN_AD/aquatone" ] && $SUDO ln -sf "$WIN_AD/aquatone" /usr/local/bin/aquatone
 fi
 
 # ---- azurehound -------------------------------------------------------------
