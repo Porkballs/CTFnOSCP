@@ -42,6 +42,7 @@ Tools are marked per **OffSec's OSCP+ Exam Guide** (not my own judgement). OffSe
 | `feroxbuster` | ✅ | Recursive content discovery (Rust) |
 | `netexec` | ✅ | **On OffSec allowed list** (as CrackMapExec/NetExec) |
 | `eyewitness` | ✅ | Screenshots + headers + default-cred ID for web/RDP/VNC — visual recon |
+| `droopescan` | ✅ | CMS scanner (Drupal/Silverstripe/WordPress/Joomla) — version + plugin enumeration |
 | `sstimap` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for SSTI |
 | `chisel-common-binaries` | ✅ | Prebuilt chisel binaries |
 | `golang-go` | ✅ | Go toolchain |
@@ -351,6 +352,7 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `wenum` | ✅ | Parameter fuzzing | pipx |
 | `netexec` (`nxc`) | ✅ | SMB/WinRM/LDAP/MSSQL | apt |
 | `eyewitness` | ✅ | Screenshot + header + default-cred recon | apt |
+| `droopescan` | ✅ | CMS enumeration (Drupal/WordPress/Joomla/Silverstripe) | apt |
 | `aquatone` | ✅ | Screenshot/visual recon across hosts | GitHub release, `/usr/local/bin/` |
 | `sstimap` | 🚫 | SSTI → RCE | apt |
 | `xsstrike` | 🚫 | XSS | wrapper |

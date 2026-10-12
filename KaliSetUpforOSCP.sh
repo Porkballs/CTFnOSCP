@@ -63,6 +63,7 @@ $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
     feroxbuster \
     netexec \
     eyewitness \
+    droopescan \
     sstimap \
     chisel-common-binaries \
     golang-go \
