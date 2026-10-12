@@ -1031,10 +1031,15 @@ fi
 
 # ---- droopescan (CMS scanner: Drupal, Silverstripe, WordPress, Joomla) ------
 # PyPI package, not in Kali's apt repo. Exposes 'droopescan' on PATH.
+# droopescan's dependency 'cement' (old release) imports the Python 2-era
+# 'imp' module, removed in Python 3.12+ — breaks on Kali's current Python.
+# Fix: pin cement to 2.10.14, which dropped that import.
 echo "  droopescan..."
 if ! command -v droopescan >/dev/null 2>&1; then
     pipx install droopescan || warn "pipx install droopescan failed"
 fi
+pipx inject droopescan "cement==2.10.14" setuptools --force >/dev/null 2>&1 \
+    || warn "droopescan: cement pin failed (may not run on this Python version)"
 
 # ---- XSStrike (XSS scanner) -------------------------------------------------
 # Full repo (imports from core/, db/, plugins/ — not single-file). Not on PyPI,

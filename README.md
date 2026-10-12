@@ -88,6 +88,8 @@ Also from `XSStrike/requirements.txt`: `python-Levenshtein`, `prettytable`, `req
 
 Note on `gopherus3`: it doesn't auto-exploit — it generates payload strings you paste into your own request. Analogous to using `revshells.com` to build a reverse shell. Not a SQLmap-class tool.
 
+Note on `droopescan`: its `cement` dependency (old release) imports the Python 2-era `imp` module, which Python 3.12+ removed — it crashes with `ModuleNotFoundError: No module named 'imp'` on current Kali out of the box. The script pins a working version automatically (`pipx inject droopescan cement==2.10.14 setuptools --force`); if you installed it manually before this fix, run that command yourself.
+
 ---
 
 ## 4. Standalone Applications
