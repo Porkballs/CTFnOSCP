@@ -363,9 +363,9 @@ pip install --break-system-packages --upgrade --quiet \
     pylnk3 ldap3 pycryptodome gssapi \
     && ok "pip libraries"
 
-# ---- 3. /opt git clones (XSStrike, XXEinjector) ----------------------------
+# ---- 3. /opt git clones (XSStrike, XXEinjector, joomla-bruteforce) ---------
 log "Updating /opt git clones..."
-for repo in XSStrike XXEinjector; do
+for repo in XSStrike XXEinjector joomla-bruteforce; do
     if [ -d "/opt/$repo" ]; then
         OUT=$(git -C "/opt/$repo" pull --ff-only --quiet 2>&1)
         echo "$OUT" | grep -q "Already up to date" && skip "$repo" || ok "$repo pulled"
@@ -1076,6 +1076,24 @@ if [ ! -f /usr/local/bin/xxeinjector ]; then
     printf '#!/bin/bash\nexec ruby /opt/XXEinjector/XXEinjector.rb "$@"\n' \
         | $SUDO tee /usr/local/bin/xxeinjector >/dev/null
     $SUDO chmod +x /usr/local/bin/xxeinjector
+fi
+
+# ---- Joomla-Bruteforce (ajnik) -----------------------------------------------
+# Joomla admin login brute force. Not on PyPI, no requirements.txt — needs
+# requests + beautifulsoup4, installed directly. Single .py file.
+echo "  Joomla-Bruteforce..."
+if [ ! -d /opt/joomla-bruteforce ]; then
+    $SUDO git clone --depth 1 https://github.com/ajnik/joomla-bruteforce /opt/joomla-bruteforce \
+        && $SUDO pip install --break-system-packages requests beautifulsoup4 >/dev/null \
+        || warn "  Joomla-Bruteforce clone/install failed"
+else
+    $SUDO git -C /opt/joomla-bruteforce pull --ff-only >/dev/null 2>&1 || true
+fi
+# /usr/local/bin/joomla-bruteforce wrapper
+if [ ! -f /usr/local/bin/joomla-bruteforce ]; then
+    printf '#!/bin/bash\nexec python3 /opt/joomla-bruteforce/joomla-brute.py "$@"\n' \
+        | $SUDO tee /usr/local/bin/joomla-bruteforce >/dev/null
+    $SUDO chmod +x /usr/local/bin/joomla-bruteforce
 fi
 
 # SharpHound — resolve actual zip asset via GitHub API (filename changes between releases)

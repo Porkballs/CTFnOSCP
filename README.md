@@ -106,6 +106,7 @@ Note on `droopescan`: its `cement` dependency (old release) imports the Python 2
 | CyberChef (Docker) | ✅ | `ghcr.io/gchq/cyberchef:latest` — served at `http://localhost:3339` (persistent) |
 | `/opt/XSStrike/` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for XSS |
 | `/opt/XXEinjector/` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for XXE |
+| `/opt/joomla-bruteforce/` | ✅ | Joomla admin login brute force — single-purpose, not auto-exploit |
 
 ### Wrappers on `/usr/local/bin/`
 
@@ -114,6 +115,7 @@ Note on `droopescan`: its `cement` dependency (old release) imports the Python 2
 | `ligolo-proxy` | ✅ | Symlink → `/opt/ligolo-ng/proxy` |
 | `xsstrike` | 🚫 | Shim → `python3 /opt/XSStrike/xsstrike.py` |
 | `xxeinjector` | 🚫 | Shim → `ruby /opt/XXEinjector/XXEinjector.rb` |
+| `joomla-bruteforce` | ✅ | Shim → `python3 /opt/joomla-bruteforce/joomla-brute.py` |
 | `update-toolkit` | ✅ | Updates CyberChef + HackTricks (also runs weekly via systemd timer) |
 
 ### Other
@@ -203,7 +205,7 @@ Policy files: `/usr/lib/firefox-esr/distribution/policies.json` and `/etc/firefo
 | apt tools | `sudo apt update && sudo apt upgrade` |
 | Everything else | `sudo update-toolkit` (also runs weekly via `update-toolkit.timer`) |
 
-`update-toolkit` covers: pipx tools, pip libraries, /opt git clones (XSStrike, XXEinjector), all GitHub release binaries (including Obsidian and RustScan), raw GitHub scripts, CyberChef (docker pull), and HackTricks (git pull + container restart).
+`update-toolkit` covers: pipx tools, pip libraries, /opt git clones (XSStrike, XXEinjector, joomla-bruteforce), all GitHub release binaries (including Obsidian and RustScan), raw GitHub scripts, CyberChef (docker pull), and HackTricks (git pull + container restart).
 
 ---
 
@@ -359,6 +361,7 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `sstimap` | 🚫 | SSTI → RCE | apt |
 | `xsstrike` | 🚫 | XSS | wrapper |
 | `xxeinjector` | 🚫 | XXE | wrapper |
+| `joomla-bruteforce` | ✅ | Joomla admin login brute force | wrapper |
 | `gopherus3` | ✅ | SSRF payloads | pipx |
 | `ldapsearch-ad.py` | ✅ | AD LDAP enum | pipx |
 | `ldeep` | ✅ | In-depth AD LDAP enum (LAPS, silos, SCCM, etc.) | pipx |
