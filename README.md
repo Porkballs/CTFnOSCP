@@ -42,7 +42,6 @@ Tools are marked per **OffSec's OSCP+ Exam Guide** (not my own judgement). OffSe
 | `feroxbuster` | ✅ | Recursive content discovery (Rust) |
 | `netexec` | ✅ | **On OffSec allowed list** (as CrackMapExec/NetExec) |
 | `eyewitness` | ✅ | Screenshots + headers + default-cred ID for web/RDP/VNC — visual recon |
-| `droopescan` | ✅ | CMS scanner (Drupal/Silverstripe/WordPress/Joomla) — version + plugin enumeration |
 | `sstimap` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for SSTI |
 | `chisel-common-binaries` | ✅ | Prebuilt chisel binaries |
 | `golang-go` | ✅ | Go toolchain |
@@ -85,6 +84,7 @@ Also from `XSStrike/requirements.txt`: `python-Levenshtein`, `prettytable`, `req
 | `bloodyAD` | ✅ | **Write-side** AD privilege abuse — WriteOwner/WriteDACL/GenericAll, RBCD, shadow creds, DCsync |
 | `wenum` | ✅ | Fuzzer (equivalent to allowed DirBuster/gobuster) |
 | `gopherus3` | ✅ | Generates SSRF **payloads** — operator manually delivers them |
+| `droopescan` | ✅ | CMS version/plugin enumeration (Drupal, Silverstripe, WordPress, Joomla) |
 
 Note on `gopherus3`: it doesn't auto-exploit — it generates payload strings you paste into your own request. Analogous to using `revshells.com` to build a reverse shell. Not a SQLmap-class tool.
 
@@ -352,7 +352,7 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `wenum` | ✅ | Parameter fuzzing | pipx |
 | `netexec` (`nxc`) | ✅ | SMB/WinRM/LDAP/MSSQL | apt |
 | `eyewitness` | ✅ | Screenshot + header + default-cred recon | apt |
-| `droopescan` | ✅ | CMS enumeration (Drupal/WordPress/Joomla/Silverstripe) | apt |
+| `droopescan` | ✅ | CMS enumeration (Drupal/WordPress/Joomla/Silverstripe) | pipx |
 | `aquatone` | ✅ | Screenshot/visual recon across hosts | GitHub release, `/usr/local/bin/` |
 | `sstimap` | 🚫 | SSTI → RCE | apt |
 | `xsstrike` | 🚫 | XSS | wrapper |

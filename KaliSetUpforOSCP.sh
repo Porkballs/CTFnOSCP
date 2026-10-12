@@ -63,7 +63,6 @@ $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
     feroxbuster \
     netexec \
     eyewitness \
-    droopescan \
     sstimap \
     chisel-common-binaries \
     golang-go \
@@ -1028,6 +1027,13 @@ fi
 echo "  gopherus (Gopherus3)..."
 if ! command -v gopherus3 >/dev/null 2>&1; then
     pipx install git+https://github.com/Esonhugh/Gopherus3.git || warn "pipx install Gopherus3 failed"
+fi
+
+# ---- droopescan (CMS scanner: Drupal, Silverstripe, WordPress, Joomla) ------
+# PyPI package, not in Kali's apt repo. Exposes 'droopescan' on PATH.
+echo "  droopescan..."
+if ! command -v droopescan >/dev/null 2>&1; then
+    pipx install droopescan || warn "pipx install droopescan failed"
 fi
 
 # ---- XSStrike (XSS scanner) -------------------------------------------------
