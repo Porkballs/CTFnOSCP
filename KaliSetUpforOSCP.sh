@@ -376,6 +376,9 @@ done
 # Re-run XSStrike deps in case requirements.txt changed
 [ -f /opt/XSStrike/requirements.txt ] && \
     pip install --break-system-packages --quiet -r /opt/XSStrike/requirements.txt
+# Re-apply the 'rb+' -> 'rb' wordlist-mode patch in case upstream pull overwrote it
+[ -f /opt/joomla-bruteforce/joomla-brute.py ] && \
+    sed -i "s/'rb+'/'rb'/" /opt/joomla-bruteforce/joomla-brute.py 2>/dev/null
 
 # ---- 4. GitHub release assets (version-checked) ----------------------------
 log "Checking GitHub release assets..."
@@ -1089,6 +1092,9 @@ if [ ! -d /opt/joomla-bruteforce ]; then
 else
     $SUDO git -C /opt/joomla-bruteforce pull --ff-only >/dev/null 2>&1 || true
 fi
+# Upstream bug: opens the wordlist 'rb+' (read+write) instead of 'rb' (read-only),
+# so it fails on any wordlist the user can't write to (e.g. root-owned rockyou.txt).
+$SUDO sed -i "s/'rb+'/'rb'/" /opt/joomla-bruteforce/joomla-brute.py 2>/dev/null
 # /usr/local/bin/joomla-bruteforce wrapper
 if [ ! -f /usr/local/bin/joomla-bruteforce ]; then
     printf '#!/bin/bash\nexec python3 /opt/joomla-bruteforce/joomla-brute.py "$@"\n' \
