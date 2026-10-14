@@ -317,7 +317,7 @@ Policy files: `/usr/lib/firefox-esr/distribution/policies.json` and `/etc/firefo
 | `linpeas.sh` | ✅ | Linux privesc enum |
 | `lse.sh` | ✅ | Linux Smart Enumeration |
 | `unix-privesc-check` | ✅ | Privesc audit |
-| `hashgrab.py` | ✅ | Payload generator (like `revshells.com`) |
+| `hashgrab.py` | ✅ | Generates SCF/URL/LNK forced-authentication files — drop on an SMB share to coerce NTLM auth from anyone who browses it, capture the hash with Responder/ntlmrelayx |
 | `chisel` | ✅ | Tunneling |
 | `nc` | ✅ | Netcat |
 | `KvcForensic/KvcForensic{,_static}` | ✅ | Offline `lsass.dmp` parsing (analogous to mimikatz) |
@@ -367,7 +367,7 @@ All ✅ for OSCP+ (utility scripts, editors, legacy tools).
 - ⚠️ **No spoofing** — IP, ARP, DNS, NBNS, etc.
 
 **All the ⚡ tools I originally flagged are actually ✅ ALLOWED on OSCP+:**
-mimikatz, Rubeus, kerbrute, netexec, all Sharp* tools, all Potato exploits, PrintSpoofer, SpoolSample, Snaffler, gopherus3 (payload gen only), hashgrab, KvcForensic, DomainPasswordSpray, Invoke-Kerberoast, etc.
+mimikatz, Rubeus, kerbrute, netexec, all Sharp* tools, all Potato exploits, PrintSpoofer, SpoolSample, Snaffler, gopherus3 (payload gen only), hashgrab (forced-auth file generator — not network poisoning, so distinct from the Responder restriction above), KvcForensic, DomainPasswordSpray, Invoke-Kerberoast, etc.
 
 The OSCP+ line isn't "does it automate anything?" — it's "does it automate the vulnerability discovery → exploitation chain like SQLmap does?" Almost none of the AD/privesc tools do that. They're targeted single-purpose exploits or enumeration, both of which OffSec explicitly permits.
 
