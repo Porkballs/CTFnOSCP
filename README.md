@@ -42,6 +42,7 @@ Tools are marked per **OffSec's OSCP+ Exam Guide** (not my own judgement). OffSe
 | `feroxbuster` | ✅ | Recursive content discovery (Rust) |
 | `netexec` | ✅ | **On OffSec allowed list** (as CrackMapExec/NetExec) |
 | `eyewitness` | ✅ | Screenshots + headers + default-cred ID for web/RDP/VNC — visual recon |
+| `bloodhound` | ✅ | **On OffSec allowed list** — AD attack-path analysis (BloodHound CE: pulls in `neo4j` + `postgresql`) |
 | `sstimap` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for SSTI |
 | `chisel-common-binaries` | ✅ | Prebuilt chisel binaries |
 | `golang-go` | ✅ | Go toolchain |
@@ -107,6 +108,7 @@ Note on `droopescan`: its `cement` dependency (old release) imports the Python 2
 | `/opt/XSStrike/` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for XSS |
 | `/opt/XXEinjector/` | 🚫 | **PROHIBITED** — SQLmap-class auto-exploit for XXE |
 | `/opt/joomla-bruteforce/` | ✅ | Joomla admin login brute force — single-purpose, not auto-exploit |
+| `/opt/BloodHound-Legacy/` | ✅ | **On OffSec allowed list** — classic standalone GUI, frozen at v4.3.1 |
 
 ### Wrappers on `/usr/local/bin/`
 
@@ -116,7 +118,31 @@ Note on `droopescan`: its `cement` dependency (old release) imports the Python 2
 | `xsstrike` | 🚫 | Shim → `python3 /opt/XSStrike/xsstrike.py` |
 | `xxeinjector` | 🚫 | Shim → `ruby /opt/XXEinjector/XXEinjector.rb` |
 | `joomla-bruteforce` | ✅ | Shim → `python3 /opt/joomla-bruteforce/joomla-brute.py` |
+| `bloodhound-legacy` | ✅ | Shim → `/opt/BloodHound-Legacy/BloodHound --no-sandbox` |
+| `bloodhound-start`, `bloodhound-setup` | ✅ | BloodHound CE (from apt package `bloodhound`) |
 | `update-toolkit` | ✅ | Updates CyberChef + HackTricks (also runs weekly via systemd timer) |
+
+### BloodHound — one-time setup
+
+Both editions share one apt-installed Neo4j backend (`bolt://localhost:7687`) — run only one GUI at a time against it.
+
+**CE** (apt package `bloodhound` — current, actively developed):
+```bash
+sudo bloodhound-setup                 # starts postgresql, creates db, starts neo4j
+# Browser: http://localhost:7474 — log in neo4j/neo4j, set a new password
+sudo vim /etc/bhapi/bhapi.json        # put the new Neo4j password in
+sudo bloodhound-start
+# Browser: http://localhost:8080/ui/login
+# Default login "admin" — generated password prints on first start, or:
+journalctl -u bloodhound 2>/dev/null | grep "Initial Password Set To:"
+# Reset anytime: sudo env bhe_recreate_default_admin=true bloodhound-start
+```
+
+**Legacy** (frozen v4.3.1 — what most OSCP/HTB walkthroughs and `Bloodhound_Cyphers.md` assume):
+```bash
+sudo neo4j start                      # if CE setup above hasn't started it already
+bloodhound-legacy                     # connects to bolt://localhost:7687
+```
 
 ### Other
 
@@ -356,6 +382,7 @@ The OSCP+ line isn't "does it automate anything?" — it's "does it automate the
 | `wenum` | ✅ | Parameter fuzzing | pipx |
 | `netexec` (`nxc`) | ✅ | SMB/WinRM/LDAP/MSSQL | apt |
 | `eyewitness` | ✅ | Screenshot + header + default-cred recon | apt |
+| `bloodhound-start`, `bloodhound-legacy` | ✅ | AD attack-path analysis (CE / Legacy GUI) | apt / GitHub release |
 | `droopescan` | ✅ | CMS enumeration (Drupal/WordPress/Joomla/Silverstripe) | pipx |
 | `aquatone` | ✅ | Screenshot/visual recon across hosts | GitHub release, `/usr/local/bin/` |
 | `sstimap` | 🚫 | SSTI → RCE | apt |

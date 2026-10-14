@@ -63,6 +63,7 @@ $SUDO DEBIAN_FRONTEND=noninteractive apt-get install -y \
     feroxbuster \
     netexec \
     eyewitness \
+    bloodhound \
     sstimap \
     chisel-common-binaries \
     golang-go \
@@ -1102,6 +1103,30 @@ if [ ! -f /usr/local/bin/joomla-bruteforce ]; then
     $SUDO chmod +x /usr/local/bin/joomla-bruteforce
 fi
 
+# ---- BloodHound Legacy (frozen at v4.3.1, FOSS GUI) --------------------------
+# BloodHound CE comes from apt (package 'bloodhound', installed above — it pulls
+# in neo4j + postgresql). This is the classic standalone Electron GUI, which is
+# what most OSCP/HTB walkthroughs and Bloodhound_Cyphers.md still assume. Final
+# community release, frozen upstream — no newer tag will ever appear.
+# Shares the same apt-installed Neo4j backend (bolt://localhost:7687) as CE;
+# run only one of the two GUIs against it at a time.
+echo "  BloodHound Legacy..."
+if [ ! -d /opt/BloodHound-Legacy ]; then
+    fetch "https://github.com/SpecterOps/BloodHound-Legacy/releases/download/v4.3.1/BloodHound-linux-x64.zip" \
+        "$TOOLKIT/BloodHound-linux-x64.zip"
+    if [ -f "$TOOLKIT/BloodHound-linux-x64.zip" ]; then
+        $SUDO unzip -o -q "$TOOLKIT/BloodHound-linux-x64.zip" -d /opt/ >/dev/null 2>&1
+        [ -d "/opt/BloodHound-linux-x64" ] && $SUDO mv /opt/BloodHound-linux-x64 /opt/BloodHound-Legacy
+        rm -f "$TOOLKIT/BloodHound-linux-x64.zip"
+    fi
+fi
+# /usr/local/bin/bloodhound-legacy wrapper
+if [ -f /opt/BloodHound-Legacy/BloodHound ] && [ ! -f /usr/local/bin/bloodhound-legacy ]; then
+    printf '#!/bin/bash\nexec /opt/BloodHound-Legacy/BloodHound --no-sandbox "$@"\n' \
+        | $SUDO tee /usr/local/bin/bloodhound-legacy >/dev/null
+    $SUDO chmod +x /usr/local/bin/bloodhound-legacy
+fi
+
 # SharpHound — resolve actual zip asset via GitHub API (filename changes between releases)
 echo "  SharpHound..."
 TAG=$(gh_latest_tag "SpecterOps/SharpHound")
@@ -1380,6 +1405,23 @@ cat <<EOF
       - $WIN_AD/agent.exe
       - $WIN_EXES/agent.exe
       - $WIN_AD/proxy
+
+    BloodHound — one-time setup required (CE and Legacy share the same
+    apt-installed Neo4j backend; run only one GUI at a time):
+      CE (apt package 'bloodhound'):
+        1. sudo bloodhound-setup
+        2. Browser: http://localhost:7474 — log in neo4j/neo4j, set a new password
+        3. sudo vim /etc/bhapi/bhapi.json  — put the new Neo4j password in
+        4. sudo bloodhound-start
+        5. Browser: http://localhost:8080/ui/login
+           Default login: admin — the generated password prints to the terminal
+           on first 'bloodhound-start', or recover it with:
+           journalctl -u bloodhound 2>/dev/null | grep "Initial Password Set To:"
+           Reset it anytime:  sudo env bhe_recreate_default_admin=true bloodhound-start
+      Legacy (frozen v4.3.1, staged at /opt/BloodHound-Legacy):
+        1. Ensure Neo4j is running: sudo neo4j start
+        2. Browser once: http://localhost:7474 — set the neo4j password if not done above
+        3. bloodhound-legacy   (connects to bolt://localhost:7687)
 
     CyberChef (Docker):
       - http://localhost:3339  (restarts automatically on reboot)
